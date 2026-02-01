@@ -6,8 +6,18 @@ FreightLink ZW is a digital freight marketplace platform for Zimbabwe that conne
 
 ## Recent Changes
 
+- **2026-02-01**: PWA Implementation with native app experience
+  - Applied FreightLink ZW logo throughout the application (header, sidebar, footer)
+  - Updated theme colors to match logo (blue #1E5AA8, green #1D8B45, orange #F7941D)
+  - Added PWA manifest with app icons for installability
+  - Created service worker for offline functionality with SPA navigation fallback
+  - Added splash screen with tagline "Connecting Shippers & Transporters Across Zimbabwe"
+  - Implemented install prompt for adding app to home screen
+  - Added PWA meta tags, Apple touch icons, and Open Graph tags
+  - Mobile-first design optimizations with safe area insets
+
 - **2026-02-01**: Full MVP implementation complete
-  - Landing page with Zimbabwe-inspired branding (green/yellow theme)
+  - Landing page with Zimbabwe-inspired branding
   - User authentication via Replit Auth with role selection
   - Shipper features: post loads, view/accept bids, track jobs
   - Transporter features: browse marketplace, place bids, manage trucks, track jobs
@@ -30,7 +40,8 @@ Preferred communication style: Simple, everyday language.
 - **Routing**: Wouter for lightweight client-side routing
 - **State Management**: TanStack React Query for server state and caching
 - **UI Components**: shadcn/ui component library built on Radix UI primitives
-- **Styling**: Tailwind CSS with custom Zimbabwe-inspired color theme (green/gold palette)
+- **Styling**: Tailwind CSS with FreightLink ZW brand colors (blue/green/orange)
+- **PWA**: Service worker, manifest.json, splash screen, install prompt
 - **Build Tool**: Vite for fast development and optimized production builds
 - **Form Handling**: React Hook Form with Zod validation
 
