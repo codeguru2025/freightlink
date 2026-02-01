@@ -8,9 +8,16 @@ import {
   insertLoadSchema, 
   insertBidSchema, 
   insertTruckSchema,
-  LOAD_STATUSES
+  insertDocumentSchema,
+  insertMessageSchema,
+  insertReviewSchema,
+  insertDisputeSchema,
+  LOAD_STATUSES,
+  DOCUMENT_TYPES,
+  DOCUMENT_STATUSES,
+  DISPUTE_STATUSES
 } from "@shared/schema";
-import type { LoadStatus, BidStatus } from "@shared/schema";
+import type { LoadStatus, BidStatus, DocumentStatus, DisputeStatus } from "@shared/schema";
 
 // Extend shared schemas for API validation
 const createProfileSchema = insertUserProfileSchema.omit({ userId: true }).extend({
@@ -26,6 +33,44 @@ const createLoadSchema = insertLoadSchema.omit({ shipperId: true, status: true }
 const createBidSchema = insertBidSchema.omit({ loadId: true, transporterId: true, status: true });
 
 const createTruckSchema = insertTruckSchema.omit({ ownerId: true });
+
+// Document validation
+const createDocumentSchema = insertDocumentSchema.omit({ userId: true, status: true, verifiedBy: true, verifiedAt: true, rejectionReason: true }).extend({
+  documentType: z.enum(["id_document", "drivers_license", "vehicle_registration", "insurance", "proof_of_delivery", "invoice", "other"]),
+  fileName: z.string().min(1, "File name is required"),
+  fileUrl: z.string().url("Valid URL is required"),
+});
+
+const verifyDocumentSchema = z.object({
+  status: z.enum(["verified", "rejected"]),
+  rejectionReason: z.string().optional(),
+});
+
+// Message validation
+const createMessageSchema = insertMessageSchema.omit({ senderId: true, isRead: true }).extend({
+  receiverId: z.string().min(1, "Receiver is required"),
+  content: z.string().min(1, "Message content is required"),
+});
+
+// Review validation
+const createReviewSchema = insertReviewSchema.omit({ reviewerId: true }).extend({
+  revieweeId: z.string().min(1, "Reviewee is required"),
+  rating: z.number().min(1).max(5),
+  comment: z.string().optional(),
+});
+
+// Dispute validation
+const createDisputeSchema = insertDisputeSchema.omit({ raisedById: true, status: true, resolution: true, resolvedById: true, resolvedAt: true }).extend({
+  jobId: z.string().min(1, "Job is required"),
+  againstId: z.string().min(1, "User is required"),
+  reason: z.string().min(3, "Reason is required"),
+  description: z.string().min(10, "Description is required"),
+});
+
+const updateDisputeSchema = z.object({
+  status: z.enum(["open", "under_review", "resolved", "closed"]),
+  resolution: z.string().optional(),
+});
 
 const updateJobStatusSchema = z.object({
   status: z.enum(LOAD_STATUSES),
@@ -639,6 +684,238 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error fetching admin reports:", error);
       res.status(500).json({ message: "Failed to fetch reports" });
+    }
+  });
+
+  // Documents routes
+  app.get("/api/documents", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) return res.status(401).json({ message: "Unauthorized" });
+      const docs = await storage.getDocuments(userId);
+      res.json(docs);
+    } catch (error) {
+      console.error("Error fetching documents:", error);
+      res.status(500).json({ message: "Failed to fetch documents" });
+    }
+  });
+
+  app.get("/api/jobs/:jobId/documents", isAuthenticated, async (req, res) => {
+    try {
+      const docs = await storage.getDocumentsByJob(req.params.jobId);
+      res.json(docs);
+    } catch (error) {
+      console.error("Error fetching job documents:", error);
+      res.status(500).json({ message: "Failed to fetch documents" });
+    }
+  });
+
+  app.post("/api/documents", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) return res.status(401).json({ message: "Unauthorized" });
+      
+      const validationResult = createDocumentSchema.safeParse(req.body);
+      if (!validationResult.success) {
+        return res.status(400).json({ message: "Invalid request body", errors: validationResult.error.errors });
+      }
+      
+      const doc = await storage.createDocument({ ...validationResult.data, userId });
+      res.status(201).json(doc);
+    } catch (error) {
+      console.error("Error creating document:", error);
+      res.status(500).json({ message: "Failed to create document" });
+    }
+  });
+
+  app.get("/api/admin/documents/pending", isAuthenticated, requireAdmin, async (req, res) => {
+    try {
+      const docs = await storage.getAllPendingDocuments();
+      res.json(docs);
+    } catch (error) {
+      console.error("Error fetching pending documents:", error);
+      res.status(500).json({ message: "Failed to fetch documents" });
+    }
+  });
+
+  app.patch("/api/admin/documents/:id/verify", isAuthenticated, requireAdmin, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      
+      const validationResult = verifyDocumentSchema.safeParse(req.body);
+      if (!validationResult.success) {
+        return res.status(400).json({ message: "Invalid request body", errors: validationResult.error.errors });
+      }
+      
+      const { status, rejectionReason } = validationResult.data;
+      const doc = await storage.updateDocumentStatus(req.params.id, status as DocumentStatus, userId, rejectionReason);
+      res.json(doc);
+    } catch (error) {
+      console.error("Error updating document status:", error);
+      res.status(500).json({ message: "Failed to update document" });
+    }
+  });
+
+  // Messages routes
+  app.get("/api/messages/conversations", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) return res.status(401).json({ message: "Unauthorized" });
+      const conversations = await storage.getConversations(userId);
+      res.json(conversations);
+    } catch (error) {
+      console.error("Error fetching conversations:", error);
+      res.status(500).json({ message: "Failed to fetch conversations" });
+    }
+  });
+
+  app.get("/api/messages/:partnerId", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) return res.status(401).json({ message: "Unauthorized" });
+      const msgs = await storage.getMessages(userId, req.params.partnerId);
+      await storage.markMessagesAsRead(userId, req.params.partnerId);
+      res.json(msgs);
+    } catch (error) {
+      console.error("Error fetching messages:", error);
+      res.status(500).json({ message: "Failed to fetch messages" });
+    }
+  });
+
+  app.post("/api/messages", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) return res.status(401).json({ message: "Unauthorized" });
+      
+      const validationResult = createMessageSchema.safeParse(req.body);
+      if (!validationResult.success) {
+        return res.status(400).json({ message: "Invalid request body", errors: validationResult.error.errors });
+      }
+      
+      const message = await storage.createMessage({ ...validationResult.data, senderId: userId });
+      res.status(201).json(message);
+    } catch (error) {
+      console.error("Error sending message:", error);
+      res.status(500).json({ message: "Failed to send message" });
+    }
+  });
+
+  // Reviews routes
+  app.get("/api/users/:userId/reviews", isAuthenticated, async (req, res) => {
+    try {
+      const reviews = await storage.getReviewsForUser(req.params.userId);
+      res.json(reviews);
+    } catch (error) {
+      console.error("Error fetching reviews:", error);
+      res.status(500).json({ message: "Failed to fetch reviews" });
+    }
+  });
+
+  app.get("/api/users/:userId/rating", isAuthenticated, async (req, res) => {
+    try {
+      const rating = await storage.getUserRating(req.params.userId);
+      res.json(rating);
+    } catch (error) {
+      console.error("Error fetching rating:", error);
+      res.status(500).json({ message: "Failed to fetch rating" });
+    }
+  });
+
+  app.get("/api/jobs/:jobId/reviews", isAuthenticated, async (req, res) => {
+    try {
+      const reviews = await storage.getReviewsByJob(req.params.jobId);
+      res.json(reviews);
+    } catch (error) {
+      console.error("Error fetching job reviews:", error);
+      res.status(500).json({ message: "Failed to fetch reviews" });
+    }
+  });
+
+  app.post("/api/jobs/:jobId/reviews", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) return res.status(401).json({ message: "Unauthorized" });
+      
+      const validationResult = createReviewSchema.safeParse(req.body);
+      if (!validationResult.success) {
+        return res.status(400).json({ message: "Invalid request body", errors: validationResult.error.errors });
+      }
+      
+      const { rating, comment, revieweeId } = validationResult.data;
+      const review = await storage.createReview({
+        jobId: req.params.jobId,
+        reviewerId: userId,
+        revieweeId,
+        rating,
+        comment,
+      });
+      res.status(201).json(review);
+    } catch (error) {
+      console.error("Error creating review:", error);
+      res.status(500).json({ message: "Failed to create review" });
+    }
+  });
+
+  // Disputes routes
+  app.get("/api/disputes", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) return res.status(401).json({ message: "Unauthorized" });
+      const profile = await storage.getProfile(userId);
+      const disputes = profile?.role === 'admin' 
+        ? await storage.getDisputes() 
+        : await storage.getDisputes(userId);
+      res.json(disputes);
+    } catch (error) {
+      console.error("Error fetching disputes:", error);
+      res.status(500).json({ message: "Failed to fetch disputes" });
+    }
+  });
+
+  app.get("/api/disputes/:id", isAuthenticated, async (req, res) => {
+    try {
+      const dispute = await storage.getDispute(req.params.id);
+      if (!dispute) return res.status(404).json({ message: "Dispute not found" });
+      res.json(dispute);
+    } catch (error) {
+      console.error("Error fetching dispute:", error);
+      res.status(500).json({ message: "Failed to fetch dispute" });
+    }
+  });
+
+  app.post("/api/disputes", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) return res.status(401).json({ message: "Unauthorized" });
+      
+      const validationResult = createDisputeSchema.safeParse(req.body);
+      if (!validationResult.success) {
+        return res.status(400).json({ message: "Invalid request body", errors: validationResult.error.errors });
+      }
+      
+      const dispute = await storage.createDispute({ ...validationResult.data, raisedById: userId });
+      res.status(201).json(dispute);
+    } catch (error) {
+      console.error("Error creating dispute:", error);
+      res.status(500).json({ message: "Failed to create dispute" });
+    }
+  });
+
+  app.patch("/api/admin/disputes/:id", isAuthenticated, requireAdmin, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      
+      const validationResult = updateDisputeSchema.safeParse(req.body);
+      if (!validationResult.success) {
+        return res.status(400).json({ message: "Invalid request body", errors: validationResult.error.errors });
+      }
+      
+      const { status, resolution } = validationResult.data;
+      const dispute = await storage.updateDisputeStatus(req.params.id, status as DisputeStatus, resolution, userId);
+      res.json(dispute);
+    } catch (error) {
+      console.error("Error updating dispute:", error);
+      res.status(500).json({ message: "Failed to update dispute" });
     }
   });
 

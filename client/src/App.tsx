@@ -22,6 +22,11 @@ import TrucksPage from "@/pages/trucks";
 import AdminLoadsPage from "@/pages/admin/loads";
 import AdminUsersPage from "@/pages/admin/users";
 import AdminAnalyticsPage from "@/pages/admin/analytics";
+import DocumentsPage from "@/pages/documents";
+import MessagesPage from "@/pages/messages";
+import ReviewsPage from "@/pages/reviews";
+import AdminDocumentsPage from "@/pages/admin-documents";
+import AdminDisputesPage from "@/pages/admin-disputes";
 import NotFound from "@/pages/not-found";
 
 import type { UserProfile } from "@shared/schema";
@@ -77,8 +82,13 @@ function AuthenticatedRoutes() {
       <Route path="/bids" component={BidsPage} />
       <Route path="/jobs" component={JobsPage} />
       <Route path="/trucks" component={TrucksPage} />
+      <Route path="/documents" component={DocumentsPage} />
+      <Route path="/messages" component={MessagesPage} />
+      <Route path="/reviews" component={ReviewsPage} />
       <Route path="/admin/loads">{() => <AdminRoute component={AdminLoadsPage} />}</Route>
       <Route path="/admin/users">{() => <AdminRoute component={AdminUsersPage} />}</Route>
+      <Route path="/admin/documents">{() => <AdminRoute component={AdminDocumentsPage} />}</Route>
+      <Route path="/admin/disputes">{() => <AdminRoute component={AdminDisputesPage} />}</Route>
       <Route path="/admin/analytics">{() => <AdminRoute component={AdminAnalyticsPage} />}</Route>
       <Route component={NotFound} />
     </Switch>

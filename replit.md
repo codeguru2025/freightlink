@@ -6,6 +6,16 @@ FreightLink ZW is a digital freight marketplace platform for Zimbabwe that conne
 
 ## Recent Changes
 
+- **2026-02-01**: Extended Features Implementation
+  - Added Documents system for verification (ID, license, insurance, proof of delivery)
+  - Added Messaging system for user-to-user communication
+  - Added Reviews and Ratings system for completed jobs
+  - Added Disputes system with admin resolution workflow
+  - New database tables: documents, messages, reviews, disputes
+  - New API routes for all new features with role-based access
+  - Updated sidebar navigation for all user roles
+  - Admin can verify/reject documents and manage disputes
+
 - **2026-02-01**: PWA Implementation with native app experience
   - Applied FreightLink ZW logo throughout the application (header, sidebar, footer)
   - Updated theme colors to match logo (blue #1E5AA8, green #1D8B45, orange #F7941D)
@@ -28,6 +38,10 @@ The application enables:
 - Shippers to post cargo loads and accept bids from transporters
 - Transporters to browse available loads, submit bids, and manage their truck fleet
 - Job tracking and status management throughout the delivery lifecycle
+- Document upload and verification for user/vehicle credentials
+- Messaging between shippers and transporters
+- Ratings and reviews for completed jobs
+- Dispute handling with admin resolution
 
 ## User Preferences
 
@@ -56,7 +70,7 @@ Preferred communication style: Simple, everyday language.
 - **Database**: PostgreSQL with Drizzle ORM
 - **Schema Location**: `shared/schema.ts` for shared type definitions
 - **Migrations**: Drizzle Kit with `db:push` command for schema synchronization
-- **Key Entities**: Users, UserProfiles, Trucks, Loads, Bids, Jobs
+- **Key Entities**: Users, UserProfiles, Trucks, Loads, Bids, Jobs, Documents, Messages, Reviews, Disputes
 
 ### Application Structure
 ```

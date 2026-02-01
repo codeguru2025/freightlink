@@ -4,6 +4,10 @@ import {
   loads, 
   bids, 
   jobs,
+  documents,
+  messages,
+  reviews,
+  disputes,
   users,
   type UserProfile, 
   type InsertUserProfile,
@@ -15,8 +19,18 @@ import {
   type InsertBid,
   type Job,
   type InsertJob,
+  type Document,
+  type InsertDocument,
+  type Message,
+  type InsertMessage,
+  type Review,
+  type InsertReview,
+  type Dispute,
+  type InsertDispute,
   type LoadStatus,
-  type BidStatus
+  type BidStatus,
+  type DocumentStatus,
+  type DisputeStatus
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, desc, inArray, sql, gte } from "drizzle-orm";
@@ -73,6 +87,31 @@ export interface IStorage {
     topRoutes: { origin: string; destination: string; count: number }[];
     usersByRole: { role: string; count: number }[];
   }>;
+
+  // Documents
+  getDocuments(userId: string): Promise<Document[]>;
+  getDocumentsByJob(jobId: string): Promise<Document[]>;
+  createDocument(doc: InsertDocument): Promise<Document>;
+  updateDocumentStatus(id: string, status: DocumentStatus, verifiedBy?: string, rejectionReason?: string): Promise<Document | undefined>;
+  getAllPendingDocuments(): Promise<(Document & { user?: UserProfile })[]>;
+
+  // Messages
+  getConversations(userId: string): Promise<{ partnerId: string; partner?: UserProfile; lastMessage?: Message; unreadCount: number }[]>;
+  getMessages(userId: string, partnerId: string): Promise<Message[]>;
+  createMessage(message: InsertMessage): Promise<Message>;
+  markMessagesAsRead(userId: string, senderId: string): Promise<void>;
+
+  // Reviews
+  getReviewsForUser(userId: string): Promise<(Review & { reviewer?: UserProfile })[]>;
+  getReviewsByJob(jobId: string): Promise<Review[]>;
+  createReview(review: InsertReview): Promise<Review>;
+  getUserRating(userId: string): Promise<{ average: number; count: number }>;
+
+  // Disputes
+  getDisputes(userId?: string): Promise<(Dispute & { job?: Job; raisedBy?: UserProfile })[]>;
+  getDispute(id: string): Promise<(Dispute & { job?: Job; raisedBy?: UserProfile; against?: UserProfile }) | undefined>;
+  createDispute(dispute: InsertDispute): Promise<Dispute>;
+  updateDisputeStatus(id: string, status: DisputeStatus, resolution?: string, resolvedById?: string): Promise<Dispute | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -476,6 +515,162 @@ export class DatabaseStorage implements IStorage {
       })),
       usersByRole: usersByRoleResult.map(u => ({ role: u.role, count: Number(u.count) })),
     };
+  }
+
+  // Documents
+  async getDocuments(userId: string): Promise<Document[]> {
+    return await db.select().from(documents).where(eq(documents.userId, userId)).orderBy(desc(documents.createdAt));
+  }
+
+  async getDocumentsByJob(jobId: string): Promise<Document[]> {
+    return await db.select().from(documents).where(eq(documents.jobId, jobId)).orderBy(desc(documents.createdAt));
+  }
+
+  async createDocument(doc: InsertDocument): Promise<Document> {
+    const [created] = await db.insert(documents).values(doc).returning();
+    return created;
+  }
+
+  async updateDocumentStatus(id: string, status: DocumentStatus, verifiedBy?: string, rejectionReason?: string): Promise<Document | undefined> {
+    const updateData: any = { status };
+    if (status === 'verified') {
+      updateData.verifiedBy = verifiedBy;
+      updateData.verifiedAt = new Date();
+    } else if (status === 'rejected') {
+      updateData.verifiedBy = verifiedBy;
+      updateData.rejectionReason = rejectionReason;
+    }
+    const [updated] = await db.update(documents).set(updateData).where(eq(documents.id, id)).returning();
+    return updated || undefined;
+  }
+
+  async getAllPendingDocuments(): Promise<(Document & { user?: UserProfile })[]> {
+    const docs = await db.select().from(documents).where(eq(documents.status, 'pending')).orderBy(desc(documents.createdAt));
+    const docsWithUser = await Promise.all(
+      docs.map(async (doc) => {
+        const [user] = await db.select().from(userProfiles).where(eq(userProfiles.userId, doc.userId));
+        return { ...doc, user };
+      })
+    );
+    return docsWithUser;
+  }
+
+  // Messages
+  async getConversations(userId: string): Promise<{ partnerId: string; partner?: UserProfile; lastMessage?: Message; unreadCount: number }[]> {
+    const allMessages = await db.select().from(messages)
+      .where(sql`${messages.senderId} = ${userId} OR ${messages.receiverId} = ${userId}`)
+      .orderBy(desc(messages.createdAt));
+
+    const conversationMap = new Map<string, { lastMessage: Message; unreadCount: number }>();
+    
+    for (const msg of allMessages) {
+      const partnerId = msg.senderId === userId ? msg.receiverId : msg.senderId;
+      if (!conversationMap.has(partnerId)) {
+        const unreadCount = allMessages.filter(m => m.senderId === partnerId && m.receiverId === userId && !m.isRead).length;
+        conversationMap.set(partnerId, { lastMessage: msg, unreadCount });
+      }
+    }
+
+    const conversations = await Promise.all(
+      Array.from(conversationMap.entries()).map(async ([partnerId, data]) => {
+        const [partner] = await db.select().from(userProfiles).where(eq(userProfiles.userId, partnerId));
+        return { partnerId, partner, lastMessage: data.lastMessage, unreadCount: data.unreadCount };
+      })
+    );
+
+    return conversations;
+  }
+
+  async getMessages(userId: string, partnerId: string): Promise<Message[]> {
+    return await db.select().from(messages)
+      .where(sql`(${messages.senderId} = ${userId} AND ${messages.receiverId} = ${partnerId}) OR (${messages.senderId} = ${partnerId} AND ${messages.receiverId} = ${userId})`)
+      .orderBy(messages.createdAt);
+  }
+
+  async createMessage(message: InsertMessage): Promise<Message> {
+    const [created] = await db.insert(messages).values(message).returning();
+    return created;
+  }
+
+  async markMessagesAsRead(userId: string, senderId: string): Promise<void> {
+    await db.update(messages).set({ isRead: true })
+      .where(and(eq(messages.senderId, senderId), eq(messages.receiverId, userId)));
+  }
+
+  // Reviews
+  async getReviewsForUser(userId: string): Promise<(Review & { reviewer?: UserProfile })[]> {
+    const reviewList = await db.select().from(reviews).where(eq(reviews.revieweeId, userId)).orderBy(desc(reviews.createdAt));
+    const reviewsWithReviewer = await Promise.all(
+      reviewList.map(async (review) => {
+        const [reviewer] = await db.select().from(userProfiles).where(eq(userProfiles.userId, review.reviewerId));
+        return { ...review, reviewer };
+      })
+    );
+    return reviewsWithReviewer;
+  }
+
+  async getReviewsByJob(jobId: string): Promise<Review[]> {
+    return await db.select().from(reviews).where(eq(reviews.jobId, jobId));
+  }
+
+  async createReview(review: InsertReview): Promise<Review> {
+    const [created] = await db.insert(reviews).values(review).returning();
+    return created;
+  }
+
+  async getUserRating(userId: string): Promise<{ average: number; count: number }> {
+    const result = await db.select({
+      avg: sql<number>`COALESCE(AVG(${reviews.rating}), 0)`,
+      count: sql<number>`COUNT(*)`,
+    }).from(reviews).where(eq(reviews.revieweeId, userId));
+    
+    return {
+      average: Number(result[0]?.avg) || 0,
+      count: Number(result[0]?.count) || 0,
+    };
+  }
+
+  // Disputes
+  async getDisputes(userId?: string): Promise<(Dispute & { job?: Job; raisedBy?: UserProfile })[]> {
+    const disputeList = userId
+      ? await db.select().from(disputes).where(sql`${disputes.raisedById} = ${userId} OR ${disputes.againstId} = ${userId}`).orderBy(desc(disputes.createdAt))
+      : await db.select().from(disputes).orderBy(desc(disputes.createdAt));
+
+    const disputesWithDetails = await Promise.all(
+      disputeList.map(async (dispute) => {
+        const [job] = await db.select().from(jobs).where(eq(jobs.id, dispute.jobId));
+        const [raisedBy] = await db.select().from(userProfiles).where(eq(userProfiles.userId, dispute.raisedById));
+        return { ...dispute, job, raisedBy };
+      })
+    );
+    return disputesWithDetails;
+  }
+
+  async getDispute(id: string): Promise<(Dispute & { job?: Job; raisedBy?: UserProfile; against?: UserProfile }) | undefined> {
+    const [dispute] = await db.select().from(disputes).where(eq(disputes.id, id));
+    if (!dispute) return undefined;
+
+    const [job] = await db.select().from(jobs).where(eq(jobs.id, dispute.jobId));
+    const [raisedBy] = await db.select().from(userProfiles).where(eq(userProfiles.userId, dispute.raisedById));
+    const [against] = await db.select().from(userProfiles).where(eq(userProfiles.userId, dispute.againstId));
+    
+    return { ...dispute, job, raisedBy, against };
+  }
+
+  async createDispute(dispute: InsertDispute): Promise<Dispute> {
+    const [created] = await db.insert(disputes).values(dispute).returning();
+    return created;
+  }
+
+  async updateDisputeStatus(id: string, status: DisputeStatus, resolution?: string, resolvedById?: string): Promise<Dispute | undefined> {
+    const updateData: any = { status, updatedAt: new Date() };
+    if (status === 'resolved' || status === 'closed') {
+      updateData.resolution = resolution;
+      updateData.resolvedById = resolvedById;
+      updateData.resolvedAt = new Date();
+    }
+    const [updated] = await db.update(disputes).set(updateData).where(eq(disputes.id, id)).returning();
+    return updated || undefined;
   }
 }
 

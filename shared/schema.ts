@@ -11,6 +11,9 @@ export const userRoleEnum = pgEnum("user_role", ["shipper", "transporter", "admi
 export const loadStatusEnum = pgEnum("load_status", ["posted", "bidding", "accepted", "in_transit", "delivered", "cancelled"]);
 export const bidStatusEnum = pgEnum("bid_status", ["pending", "accepted", "rejected", "withdrawn"]);
 export const cargoTypeEnum = pgEnum("cargo_type", ["general", "perishable", "hazardous", "fragile", "livestock", "machinery", "bulk", "containerized"]);
+export const documentTypeEnum = pgEnum("document_type", ["id_document", "drivers_license", "vehicle_registration", "insurance", "proof_of_delivery", "invoice", "other"]);
+export const documentStatusEnum = pgEnum("document_status", ["pending", "verified", "rejected"]);
+export const disputeStatusEnum = pgEnum("dispute_status", ["open", "under_review", "resolved", "closed"]);
 
 // User Profiles - extends auth users with role-specific data
 export const userProfiles = pgTable("user_profiles", {
@@ -111,6 +114,76 @@ export const jobs = pgTable("jobs", {
   index("idx_jobs_status").on(table.status),
 ]);
 
+// Documents - for verification and proof of delivery
+export const documents = pgTable("documents", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull(),
+  jobId: varchar("job_id"),
+  documentType: documentTypeEnum("document_type").notNull(),
+  fileName: varchar("file_name").notNull(),
+  fileUrl: text("file_url").notNull(),
+  fileSize: integer("file_size"),
+  status: documentStatusEnum("status").notNull().default("pending"),
+  verifiedBy: varchar("verified_by"),
+  verifiedAt: timestamp("verified_at"),
+  rejectionReason: text("rejection_reason"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_documents_user").on(table.userId),
+  index("idx_documents_job").on(table.jobId),
+  index("idx_documents_status").on(table.status),
+]);
+
+// Messages - for communication between users
+export const messages = pgTable("messages", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  senderId: varchar("sender_id").notNull(),
+  receiverId: varchar("receiver_id").notNull(),
+  jobId: varchar("job_id"),
+  loadId: varchar("load_id"),
+  content: text("content").notNull(),
+  isRead: boolean("is_read").default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_messages_sender").on(table.senderId),
+  index("idx_messages_receiver").on(table.receiverId),
+  index("idx_messages_job").on(table.jobId),
+]);
+
+// Reviews - ratings after job completion
+export const reviews = pgTable("reviews", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  jobId: varchar("job_id").notNull(),
+  reviewerId: varchar("reviewer_id").notNull(),
+  revieweeId: varchar("reviewee_id").notNull(),
+  rating: integer("rating").notNull(),
+  comment: text("comment"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_reviews_job").on(table.jobId),
+  index("idx_reviews_reviewee").on(table.revieweeId),
+]);
+
+// Disputes - for handling issues
+export const disputes = pgTable("disputes", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  jobId: varchar("job_id").notNull(),
+  raisedById: varchar("raised_by_id").notNull(),
+  againstId: varchar("against_id").notNull(),
+  reason: text("reason").notNull(),
+  description: text("description").notNull(),
+  status: disputeStatusEnum("status").notNull().default("open"),
+  resolution: text("resolution"),
+  resolvedById: varchar("resolved_by_id"),
+  resolvedAt: timestamp("resolved_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_disputes_job").on(table.jobId),
+  index("idx_disputes_raised_by").on(table.raisedById),
+  index("idx_disputes_status").on(table.status),
+]);
+
 // Relations
 export const userProfilesRelations = relations(userProfiles, ({ many }) => ({
   trucks: many(trucks),
@@ -198,6 +271,27 @@ export const insertJobSchema = createInsertSchema(jobs).omit({
   updatedAt: true,
 });
 
+export const insertDocumentSchema = createInsertSchema(documents).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertMessageSchema = createInsertSchema(messages).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertReviewSchema = createInsertSchema(reviews).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertDisputeSchema = createInsertSchema(disputes).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
 // Types
 export type UserProfile = typeof userProfiles.$inferSelect;
 export type InsertUserProfile = z.infer<typeof insertUserProfileSchema>;
@@ -209,6 +303,14 @@ export type Bid = typeof bids.$inferSelect;
 export type InsertBid = z.infer<typeof insertBidSchema>;
 export type Job = typeof jobs.$inferSelect;
 export type InsertJob = z.infer<typeof insertJobSchema>;
+export type Document = typeof documents.$inferSelect;
+export type InsertDocument = z.infer<typeof insertDocumentSchema>;
+export type Message = typeof messages.$inferSelect;
+export type InsertMessage = z.infer<typeof insertMessageSchema>;
+export type Review = typeof reviews.$inferSelect;
+export type InsertReview = z.infer<typeof insertReviewSchema>;
+export type Dispute = typeof disputes.$inferSelect;
+export type InsertDispute = z.infer<typeof insertDisputeSchema>;
 
 // Enums for frontend
 export const USER_ROLES = ["shipper", "transporter", "admin"] as const;
@@ -220,3 +322,9 @@ export type UserRole = typeof USER_ROLES[number];
 export type LoadStatus = typeof LOAD_STATUSES[number];
 export type BidStatus = typeof BID_STATUSES[number];
 export type CargoType = typeof CARGO_TYPES[number];
+export const DOCUMENT_TYPES = ["id_document", "drivers_license", "vehicle_registration", "insurance", "proof_of_delivery", "invoice", "other"] as const;
+export const DOCUMENT_STATUSES = ["pending", "verified", "rejected"] as const;
+export const DISPUTE_STATUSES = ["open", "under_review", "resolved", "closed"] as const;
+export type DocumentType = typeof DOCUMENT_TYPES[number];
+export type DocumentStatus = typeof DOCUMENT_STATUSES[number];
+export type DisputeStatus = typeof DISPUTE_STATUSES[number];
