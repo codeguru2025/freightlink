@@ -1,13 +1,18 @@
 import { useRoute, Link, useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 import { DashboardLayout } from "@/components/dashboard-layout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 import { LoadStatusBadge } from "@/components/status-badge";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -30,6 +35,12 @@ import { format } from "date-fns";
 import { useState } from "react";
 import type { Job, Load, UserProfile, Review, Document as DocumentType, LoadStatus } from "@shared/schema";
 
+const documentUploadSchema = z.object({
+  documentType: z.enum(["proof_of_delivery", "invoice", "insurance", "other"]),
+  fileName: z.string().min(1, "File name is required"),
+  fileUrl: z.string().url("Please enter a valid URL"),
+});
+
 interface JobWithDetails extends Job {
   load?: Load;
 }
@@ -44,10 +55,11 @@ function StarRating({ rating, onSelect, interactive = false }: { rating: number;
       {[1, 2, 3, 4, 5].map((star) => (
         <Star
           key={star}
-          className={`w-6 h-6 ${interactive ? "cursor-pointer" : ""} ${
-            star <= rating ? "fill-yellow-400 text-yellow-400" : "text-muted-foreground"
+          className={`w-6 h-6 ${interactive ? "cursor-pointer hover:scale-110 transition-transform" : ""} ${
+            star <= rating ? "fill-primary text-primary" : "text-muted-foreground"
           }`}
           onClick={() => interactive && onSelect?.(star)}
+          data-testid={`star-rating-${star}`}
         />
       ))}
     </div>
@@ -68,9 +80,15 @@ export default function JobDetailPage() {
   const [comment, setComment] = useState("");
   const [disputeReason, setDisputeReason] = useState("");
   const [disputeDescription, setDisputeDescription] = useState("");
-  const [docType, setDocType] = useState("proof_of_delivery");
-  const [docName, setDocName] = useState("");
-  const [docUrl, setDocUrl] = useState("");
+
+  const documentForm = useForm<z.infer<typeof documentUploadSchema>>({
+    resolver: zodResolver(documentUploadSchema),
+    defaultValues: {
+      documentType: "proof_of_delivery",
+      fileName: "",
+      fileUrl: "",
+    },
+  });
 
   const { data: profile } = useQuery<UserProfile>({
     queryKey: ["/api/profile"],
@@ -149,12 +167,12 @@ export default function JobDetailPage() {
   });
 
   const uploadDocMutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (data: z.infer<typeof documentUploadSchema>) => {
       return apiRequest("POST", "/api/documents", {
         jobId,
-        documentType: docType,
-        fileName: docName,
-        fileUrl: docUrl,
+        documentType: data.documentType,
+        fileName: data.fileName,
+        fileUrl: data.fileUrl,
       });
     },
     onSuccess: () => {
@@ -162,13 +180,16 @@ export default function JobDetailPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/documents"] });
       toast({ title: "Document uploaded" });
       setUploadDialogOpen(false);
-      setDocName("");
-      setDocUrl("");
+      documentForm.reset();
     },
     onError: () => {
       toast({ title: "Failed to upload document", variant: "destructive" });
     },
   });
+
+  const onDocumentSubmit = (data: z.infer<typeof documentUploadSchema>) => {
+    uploadDocMutation.mutate(data);
+  };
 
   const startConversation = () => {
     const partnerId = profile?.role === "shipper" ? job?.transporterId : job?.shipperId;
@@ -208,7 +229,7 @@ export default function JobDetailPage() {
   return (
     <DashboardLayout title={job.load?.title || "Job Details"} breadcrumbs={[{ label: "Jobs", href: "/jobs" }, { label: job.load?.title || "Details" }]}>
       <div className="space-y-6">
-        <Link href="/jobs" className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
+        <Link href="/jobs" className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground" data-testid="link-back-to-jobs">
           <ArrowLeft className="h-4 w-4" />
           Back to Jobs
         </Link>
@@ -348,7 +369,7 @@ export default function JobDetailPage() {
                           </div>
                         </div>
                         <DialogFooter>
-                          <Button variant="outline" onClick={() => setReviewDialogOpen(false)}>Cancel</Button>
+                          <Button variant="outline" onClick={() => setReviewDialogOpen(false)} data-testid="button-cancel-review">Cancel</Button>
                           <Button onClick={() => reviewMutation.mutate()} disabled={reviewMutation.isPending} data-testid="button-submit-review">
                             Submit Review
                           </Button>
@@ -382,50 +403,74 @@ export default function JobDetailPage() {
                         <DialogTitle>Upload Document</DialogTitle>
                         <DialogDescription>Add a document for this job</DialogDescription>
                       </DialogHeader>
-                      <div className="space-y-4">
-                        <div>
-                          <label className="text-sm font-medium">Document Type</label>
-                          <Select value={docType} onValueChange={setDocType}>
-                            <SelectTrigger className="mt-2" data-testid="select-job-doc-type">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="proof_of_delivery">Proof of Delivery</SelectItem>
-                              <SelectItem value="invoice">Invoice</SelectItem>
-                              <SelectItem value="insurance">Insurance</SelectItem>
-                              <SelectItem value="other">Other</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div>
-                          <label className="text-sm font-medium">File Name</label>
-                          <input
-                            type="text"
-                            placeholder="e.g., delivery_receipt.pdf"
-                            value={docName}
-                            onChange={(e) => setDocName(e.target.value)}
-                            className="mt-2 w-full rounded-md border px-3 py-2"
-                            data-testid="input-job-doc-name"
+                      <Form {...documentForm}>
+                        <form onSubmit={documentForm.handleSubmit(onDocumentSubmit)} className="space-y-4">
+                          <FormField
+                            control={documentForm.control}
+                            name="documentType"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Document Type</FormLabel>
+                                <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                  <FormControl>
+                                    <SelectTrigger data-testid="select-job-doc-type">
+                                      <SelectValue placeholder="Select type" />
+                                    </SelectTrigger>
+                                  </FormControl>
+                                  <SelectContent>
+                                    <SelectItem value="proof_of_delivery">Proof of Delivery</SelectItem>
+                                    <SelectItem value="invoice">Invoice</SelectItem>
+                                    <SelectItem value="insurance">Insurance</SelectItem>
+                                    <SelectItem value="other">Other</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                                <FormMessage />
+                              </FormItem>
+                            )}
                           />
-                        </div>
-                        <div>
-                          <label className="text-sm font-medium">File URL</label>
-                          <input
-                            type="url"
-                            placeholder="https://..."
-                            value={docUrl}
-                            onChange={(e) => setDocUrl(e.target.value)}
-                            className="mt-2 w-full rounded-md border px-3 py-2"
-                            data-testid="input-job-doc-url"
+                          <FormField
+                            control={documentForm.control}
+                            name="fileName"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>File Name</FormLabel>
+                                <FormControl>
+                                  <Input
+                                    placeholder="e.g., delivery_receipt.pdf"
+                                    data-testid="input-job-doc-name"
+                                    {...field}
+                                  />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
                           />
-                        </div>
-                      </div>
-                      <DialogFooter>
-                        <Button variant="outline" onClick={() => setUploadDialogOpen(false)}>Cancel</Button>
-                        <Button onClick={() => uploadDocMutation.mutate()} disabled={!docName || !docUrl || uploadDocMutation.isPending} data-testid="button-submit-job-doc">
-                          Upload
-                        </Button>
-                      </DialogFooter>
+                          <FormField
+                            control={documentForm.control}
+                            name="fileUrl"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>File URL</FormLabel>
+                                <FormControl>
+                                  <Input
+                                    type="url"
+                                    placeholder="https://..."
+                                    data-testid="input-job-doc-url"
+                                    {...field}
+                                  />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                          <DialogFooter>
+                            <Button type="button" variant="outline" onClick={() => { setUploadDialogOpen(false); documentForm.reset(); }} data-testid="button-cancel-job-doc">Cancel</Button>
+                            <Button type="submit" disabled={uploadDocMutation.isPending} data-testid="button-submit-job-doc">
+                              Upload
+                            </Button>
+                          </DialogFooter>
+                        </form>
+                      </Form>
                     </DialogContent>
                   </Dialog>
                 </div>
@@ -466,7 +511,7 @@ export default function JobDetailPage() {
               </CardHeader>
               <CardContent>
                 <p className="font-medium">Contact via messaging</p>
-                <Button variant="outline" className="w-full mt-4" onClick={startConversation}>
+                <Button variant="outline" className="w-full mt-4" onClick={startConversation} data-testid="button-sidebar-message">
                   <MessageSquare className="w-4 h-4 mr-2" />
                   Send Message
                 </Button>
@@ -522,7 +567,7 @@ export default function JobDetailPage() {
                         </div>
                       </div>
                       <DialogFooter>
-                        <Button variant="outline" onClick={() => setDisputeDialogOpen(false)}>Cancel</Button>
+                        <Button variant="outline" onClick={() => setDisputeDialogOpen(false)} data-testid="button-cancel-dispute">Cancel</Button>
                         <Button 
                           variant="destructive" 
                           onClick={() => disputeMutation.mutate()} 

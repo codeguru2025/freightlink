@@ -22,13 +22,25 @@ interface Conversation {
 export default function MessagesPage() {
   const { user } = useAuth();
   const { toast } = useToast();
+  const [location] = useLocation();
   const [messageText, setMessageText] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Handle partner query parameter from job detail page
-  const urlParams = new URLSearchParams(window.location.search);
-  const initialPartner = urlParams.get("partner");
-  const [selectedPartner, setSelectedPartner] = useState<string | null>(initialPartner);
+  // Parse partner from wouter location for routing state sync
+  const getPartnerFromLocation = () => {
+    const url = new URL(location, "http://localhost");
+    return url.searchParams.get("partner");
+  };
+  
+  const [selectedPartner, setSelectedPartner] = useState<string | null>(() => getPartnerFromLocation());
+  
+  // Update selected partner when location changes
+  useEffect(() => {
+    const partnerFromUrl = getPartnerFromLocation();
+    if (partnerFromUrl && partnerFromUrl !== selectedPartner) {
+      setSelectedPartner(partnerFromUrl);
+    }
+  }, [location]);
 
   const { data: conversations, isLoading: loadingConversations } = useQuery<Conversation[]>({
     queryKey: ["/api/messages/conversations"],
