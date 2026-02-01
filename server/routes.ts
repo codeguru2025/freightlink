@@ -43,9 +43,9 @@ export async function registerRoutes(
   await setupAuth(app);
   registerAuthRoutes(app);
 
-  // Helper to get user ID from request
+  // Helper to get user ID from request (supports both Google OAuth and Replit Auth)
   const getUserId = (req: any): string | null => {
-    return req.user?.claims?.sub || null;
+    return req.user?.id || req.user?.claims?.sub || null;
   };
 
   // Profile routes
