@@ -25,6 +25,7 @@ import AdminAnalyticsPage from "@/pages/admin/analytics";
 import DocumentsPage from "@/pages/documents";
 import MessagesPage from "@/pages/messages";
 import ReviewsPage from "@/pages/reviews";
+import JobDetailPage from "@/pages/job-detail";
 import AdminDocumentsPage from "@/pages/admin-documents";
 import AdminDisputesPage from "@/pages/admin-disputes";
 import NotFound from "@/pages/not-found";
@@ -81,6 +82,7 @@ function AuthenticatedRoutes() {
       <Route path="/marketplace" component={MarketplacePage} />
       <Route path="/bids" component={BidsPage} />
       <Route path="/jobs" component={JobsPage} />
+      <Route path="/jobs/:id" component={JobDetailPage} />
       <Route path="/trucks" component={TrucksPage} />
       <Route path="/documents" component={DocumentsPage} />
       <Route path="/messages" component={MessagesPage} />

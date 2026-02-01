@@ -173,7 +173,7 @@ function ShipperDashboard({ stats, recentLoads, activeJobs, loadsLoading, jobsLo
                 <Package className="h-12 w-12 mx-auto mb-2 opacity-50" />
                 <p>No loads posted yet</p>
                 <Link href="/loads/new">
-                  <Button variant="link" className="mt-2">Post your first load</Button>
+                  <Button variant="ghost" className="mt-2">Post your first load</Button>
                 </Link>
               </div>
             )}
@@ -299,7 +299,7 @@ function TransporterDashboard({ stats, activeJobs, jobsLoading }: {
               <Truck className="h-12 w-12 mx-auto mb-2 opacity-50" />
               <p>No active jobs</p>
               <Link href="/marketplace">
-                <Button variant="link" className="mt-2">Browse available loads</Button>
+                <Button variant="ghost" className="mt-2">Browse available loads</Button>
               </Link>
             </div>
           )}

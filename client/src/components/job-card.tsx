@@ -64,8 +64,8 @@ export function JobCard({ job, onUpdateStatus, isTransporter, isShipper }: JobCa
           </div>
         </div>
       </CardContent>
-      <CardFooter className="flex gap-2 pt-0">
-        <Link href={`/jobs/${job.id}`} className="flex-1">
+      <CardFooter className="flex flex-wrap gap-2 pt-0">
+        <Link href={`/jobs/${job.id}`} className="flex-1 min-w-[120px]">
           <Button variant="outline" className="w-full" data-testid={`button-view-job-${job.id}`}>
             View Details
           </Button>

@@ -22,9 +22,13 @@ interface Conversation {
 export default function MessagesPage() {
   const { user } = useAuth();
   const { toast } = useToast();
-  const [selectedPartner, setSelectedPartner] = useState<string | null>(null);
   const [messageText, setMessageText] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Handle partner query parameter from job detail page
+  const urlParams = new URLSearchParams(window.location.search);
+  const initialPartner = urlParams.get("partner");
+  const [selectedPartner, setSelectedPartner] = useState<string | null>(initialPartner);
 
   const { data: conversations, isLoading: loadingConversations } = useQuery<Conversation[]>({
     queryKey: ["/api/messages/conversations"],
