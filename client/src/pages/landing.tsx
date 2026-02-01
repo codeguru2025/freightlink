@@ -8,6 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Truck, Package, Shield, MapPin, Clock, Users, ArrowRight, CheckCircle, KeyRound } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
+import logoPath from "@assets/ChatGPT_Image_Feb_1,_2026,_09_08_34_AM_1769930479384.png";
 
 export default function LandingPage() {
   const [username, setUsername] = useState("");
@@ -47,10 +48,7 @@ export default function LandingPage() {
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="flex h-16 items-center justify-between gap-4">
             <div className="flex items-center gap-2">
-              <div className="flex h-10 w-10 items-center justify-center rounded-md bg-primary">
-                <Truck className="h-6 w-6 text-primary-foreground" />
-              </div>
-              <span className="text-xl font-bold">FreightLink ZW</span>
+              <img src={logoPath} alt="FreightLink ZW" className="h-10 w-auto" />
             </div>
             <div className="hidden md:flex items-center gap-6">
               <a href="#features" className="text-sm text-muted-foreground hover:text-foreground transition-colors" data-testid="link-features">Features</a>
@@ -311,10 +309,7 @@ export default function LandingPage() {
       <footer className="border-t border-border py-8 px-4 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-7xl flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary">
-              <Truck className="h-4 w-4 text-primary-foreground" />
-            </div>
-            <span className="font-semibold">FreightLink ZW</span>
+            <img src={logoPath} alt="FreightLink ZW" className="h-8 w-auto" />
           </div>
           <p className="text-sm text-muted-foreground">
             &copy; {new Date().getFullYear()} FreightLink ZW. All rights reserved.

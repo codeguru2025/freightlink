@@ -23,7 +23,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
-  Truck,
   Package,
   Home,
   PlusCircle,
@@ -38,6 +37,7 @@ import {
   TruckIcon,
 } from "lucide-react";
 import type { UserProfile } from "@shared/schema";
+import logoPath from "@assets/ChatGPT_Image_Feb_1,_2026,_09_08_34_AM_1769930479384.png";
 
 export function AppSidebar() {
   const [location] = useLocation();
@@ -90,13 +90,11 @@ export function AppSidebar() {
     <Sidebar>
       <SidebarHeader className="border-b border-sidebar-border p-4">
         <Link href="/dashboard" className="flex items-center gap-2">
-          <div className="flex h-10 w-10 items-center justify-center rounded-md bg-sidebar-primary">
-            <Truck className="h-6 w-6 text-sidebar-primary-foreground" />
-          </div>
-          <div className="flex flex-col">
-            <span className="font-bold text-lg">FreightLink</span>
-            <span className="text-xs text-sidebar-foreground/70">Zimbabwe</span>
-          </div>
+          <img 
+            src={logoPath} 
+            alt="FreightLink ZW" 
+            className="h-10 w-auto brightness-0 invert"
+          />
         </Link>
       </SidebarHeader>
       
