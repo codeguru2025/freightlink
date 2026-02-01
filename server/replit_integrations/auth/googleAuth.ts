@@ -4,6 +4,7 @@ import session from "express-session";
 import type { Express, RequestHandler } from "express";
 import connectPg from "connect-pg-simple";
 import { authStorage } from "./storage";
+import { storage } from "../../storage";
 
 export function getSession() {
   const sessionTtl = 7 * 24 * 60 * 60 * 1000; // 1 week
@@ -146,7 +147,7 @@ export async function setupAuth(app: Express) {
       // Create admin user session
       const adminUserId = "admin-system-user";
       
-      // Upsert admin user in storage
+      // Upsert admin user in auth storage
       await authStorage.upsertUser({
         id: adminUserId,
         email: "admin@freightlink.zw",
@@ -154,6 +155,18 @@ export async function setupAuth(app: Express) {
         lastName: "Admin",
         profileImageUrl: "",
       });
+      
+      // Ensure admin profile exists with admin role
+      const existingProfile = await storage.getProfile(adminUserId);
+      if (!existingProfile) {
+        await storage.createProfile({
+          userId: adminUserId,
+          role: "admin",
+          companyName: "FreightLink ZW",
+          phoneNumber: "",
+          city: "Harare",
+        });
+      }
       
       // Log in the admin user
       const adminUser = {

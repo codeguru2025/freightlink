@@ -1,9 +1,46 @@
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { Truck, Package, Shield, MapPin, Clock, Users, ArrowRight, CheckCircle } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Truck, Package, Shield, MapPin, Clock, Users, ArrowRight, CheckCircle, KeyRound } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { apiRequest } from "@/lib/queryClient";
 
 export default function LandingPage() {
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const { toast } = useToast();
+
+  const handleAdminLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoading(true);
+    
+    try {
+      await apiRequest("POST", "/api/admin/login", { username, password });
+      
+      toast({
+        title: "Login successful",
+        description: "Welcome, Admin!",
+      });
+      
+      setDialogOpen(false);
+      window.location.href = "/";
+    } catch (error: any) {
+      toast({
+        title: "Login failed",
+        description: error.message || "Invalid credentials",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-background">
       <nav className="fixed top-0 left-0 right-0 z-50 border-b border-border/50 bg-background/80 backdrop-blur-lg">
@@ -22,6 +59,46 @@ export default function LandingPage() {
             </div>
             <div className="flex items-center gap-3">
               <ThemeToggle />
+              <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button variant="ghost" size="icon" data-testid="button-admin-login">
+                    <KeyRound className="h-4 w-4" />
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Admin Login</DialogTitle>
+                  </DialogHeader>
+                  <form onSubmit={handleAdminLogin} className="space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="username">Username</Label>
+                      <Input
+                        id="username"
+                        value={username}
+                        onChange={(e) => setUsername(e.target.value)}
+                        placeholder="Enter admin username"
+                        data-testid="input-admin-username"
+                        required
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="password">Password</Label>
+                      <Input
+                        id="password"
+                        type="password"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        placeholder="Enter admin password"
+                        data-testid="input-admin-password"
+                        required
+                      />
+                    </div>
+                    <Button type="submit" className="w-full" disabled={isLoading} data-testid="button-admin-submit">
+                      {isLoading ? "Logging in..." : "Login as Admin"}
+                    </Button>
+                  </form>
+                </DialogContent>
+              </Dialog>
               <a href="/api/login">
                 <Button data-testid="button-login">
                   Get Started
