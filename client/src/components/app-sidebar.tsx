@@ -101,12 +101,16 @@ export function AppSidebar() {
   return (
     <Sidebar>
       <SidebarHeader className="border-b border-sidebar-border p-4">
-        <Link href="/dashboard" className="flex items-center gap-2">
+        <Link href="/dashboard" className="flex items-center gap-3">
           <img 
             src={logoPath} 
             alt="FreightLink ZW" 
-            className="h-10 w-auto brightness-0 invert"
+            className="h-14 w-auto"
           />
+          <div className="flex flex-col">
+            <span className="font-bold text-lg text-sidebar-foreground">FreightLink</span>
+            <span className="text-xs text-sidebar-foreground/70 font-medium">ZIMBABWE</span>
+          </div>
         </Link>
       </SidebarHeader>
       
