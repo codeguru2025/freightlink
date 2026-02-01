@@ -6,6 +6,16 @@ FreightLink ZW is a digital freight marketplace platform for Zimbabwe that conne
 
 ## Recent Changes
 
+- **2026-02-01**: Job Detail Page Integration
+  - Created comprehensive job detail page (/jobs/:id) with full feature integration
+  - Messaging integration: "Message" button navigates to conversations with partner
+  - Reviews integration: Leave review dialog for completed jobs with star ratings
+  - Disputes integration: Raise dispute dialog for reporting job issues
+  - Document upload integration: Upload proof of delivery and job-related documents
+  - Forms use React Hook Form with Zod validation for proper data handling
+  - All interactive elements include data-testid attributes for testing
+  - Star rating component uses theme tokens for proper dark/light mode support
+
 - **2026-02-01**: Extended Features Implementation
   - Added Documents system for verification (ID, license, insurance, proof of delivery)
   - Added Messaging system for user-to-user communication
