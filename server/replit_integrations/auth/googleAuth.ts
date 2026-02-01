@@ -130,6 +130,51 @@ export async function setupAuth(app: Express) {
       res.redirect("/");
     });
   });
+
+  // Admin login route - validates against stored secrets
+  app.post("/api/admin/login", async (req, res) => {
+    const { username, password } = req.body;
+    
+    const adminUsername = process.env.ADMIN_USERNAME;
+    const adminPassword = process.env.ADMIN_PASSWORD;
+    
+    if (!adminUsername || !adminPassword) {
+      return res.status(500).json({ message: "Admin credentials not configured" });
+    }
+    
+    if (username === adminUsername && password === adminPassword) {
+      // Create admin user session
+      const adminUserId = "admin-system-user";
+      
+      // Upsert admin user in storage
+      await authStorage.upsertUser({
+        id: adminUserId,
+        email: "admin@freightlink.zw",
+        firstName: "System",
+        lastName: "Admin",
+        profileImageUrl: "",
+      });
+      
+      // Log in the admin user
+      const adminUser = {
+        id: adminUserId,
+        email: "admin@freightlink.zw",
+        firstName: "System",
+        lastName: "Admin",
+        profileImageUrl: "",
+      };
+      
+      req.login(adminUser, (err) => {
+        if (err) {
+          console.error("Admin login error:", err);
+          return res.status(500).json({ message: "Login failed" });
+        }
+        return res.json({ success: true, user: adminUser });
+      });
+    } else {
+      return res.status(401).json({ message: "Invalid credentials" });
+    }
+  });
 }
 
 export const isAuthenticated: RequestHandler = (req, res, next) => {
