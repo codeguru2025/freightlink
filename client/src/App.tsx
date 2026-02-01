@@ -25,6 +25,18 @@ import NotFound from "@/pages/not-found";
 
 import type { UserProfile } from "@shared/schema";
 
+function AdminRoute({ component: Component }: { component: React.ComponentType }) {
+  const { data: profile } = useQuery<UserProfile>({
+    queryKey: ["/api/profile"],
+  });
+
+  if (profile?.role !== "admin") {
+    return <DashboardPage />;
+  }
+
+  return <Component />;
+}
+
 function AuthenticatedRoutes() {
   const { user, isLoading: authLoading } = useAuth();
 
@@ -64,9 +76,9 @@ function AuthenticatedRoutes() {
       <Route path="/bids" component={BidsPage} />
       <Route path="/jobs" component={JobsPage} />
       <Route path="/trucks" component={TrucksPage} />
-      <Route path="/admin/loads" component={AdminLoadsPage} />
-      <Route path="/admin/users" component={AdminUsersPage} />
-      <Route path="/admin/analytics" component={AdminAnalyticsPage} />
+      <Route path="/admin/loads">{() => <AdminRoute component={AdminLoadsPage} />}</Route>
+      <Route path="/admin/users">{() => <AdminRoute component={AdminUsersPage} />}</Route>
+      <Route path="/admin/analytics">{() => <AdminRoute component={AdminAnalyticsPage} />}</Route>
       <Route component={NotFound} />
     </Switch>
   );
