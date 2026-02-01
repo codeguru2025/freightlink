@@ -4,6 +4,7 @@ import {
   loads, 
   bids, 
   jobs,
+  users,
   type UserProfile, 
   type InsertUserProfile,
   type Truck,
@@ -18,7 +19,7 @@ import {
   type BidStatus
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, desc, inArray, sql } from "drizzle-orm";
+import { eq, and, desc, inArray, sql, gte } from "drizzle-orm";
 
 export interface IStorage {
   // User Profiles
@@ -60,6 +61,17 @@ export interface IStorage {
     activeJobs: number;
     totalBids: number;
     completedJobs: number;
+  }>;
+
+  // Admin functions
+  getAllUsers(): Promise<(UserProfile & { email?: string })[]>;
+  getAllLoads(): Promise<(Load & { shipper?: UserProfile })[]>;
+  getAllJobs(): Promise<(Job & { load?: Load })[]>;
+  getAdminReports(): Promise<{
+    loadsByStatus: { status: string; count: number }[];
+    recentActivity: { date: string; loads: number; bids: number; jobs: number }[];
+    topRoutes: { origin: string; destination: string; count: number }[];
+    usersByRole: { role: string; count: number }[];
   }>;
 }
 
@@ -319,6 +331,150 @@ export class DatabaseStorage implements IStorage {
       activeJobs: Number(activeJobsResult[0]?.count) || 0,
       totalBids: Number(totalBidsResult[0]?.count) || 0,
       completedJobs: Number(completedJobsResult[0]?.count) || 0,
+    };
+  }
+
+  // Admin functions
+  async getAllUsers(): Promise<(UserProfile & { email?: string })[]> {
+    const results = await db
+      .select({
+        profile: userProfiles,
+        email: users.email,
+      })
+      .from(userProfiles)
+      .leftJoin(users, eq(userProfiles.userId, users.id))
+      .orderBy(desc(userProfiles.createdAt));
+
+    return results.map(r => ({
+      ...r.profile,
+      email: r.email || undefined,
+    }));
+  }
+
+  async getAllLoads(): Promise<(Load & { shipper?: UserProfile })[]> {
+    const loadsData = await db.select().from(loads).orderBy(desc(loads.createdAt));
+    
+    const loadResults = await Promise.all(
+      loadsData.map(async (load) => {
+        const [shipper] = await db.select().from(userProfiles).where(eq(userProfiles.userId, load.shipperId));
+        return { ...load, shipper };
+      })
+    );
+
+    return loadResults;
+  }
+
+  async getAllJobs(): Promise<(Job & { load?: Load })[]> {
+    const jobsData = await db.select().from(jobs).orderBy(desc(jobs.createdAt));
+    
+    const jobResults = await Promise.all(
+      jobsData.map(async (job) => {
+        const [load] = await db.select().from(loads).where(eq(loads.id, job.loadId));
+        return { ...job, load };
+      })
+    );
+
+    return jobResults;
+  }
+
+  async getAdminReports(): Promise<{
+    loadsByStatus: { status: string; count: number }[];
+    recentActivity: { date: string; loads: number; bids: number; jobs: number }[];
+    topRoutes: { origin: string; destination: string; count: number }[];
+    usersByRole: { role: string; count: number }[];
+  }> {
+    // Loads by status
+    const loadsByStatusResult = await db
+      .select({
+        status: loads.status,
+        count: sql<number>`count(*)`,
+      })
+      .from(loads)
+      .groupBy(loads.status);
+
+    // Users by role
+    const usersByRoleResult = await db
+      .select({
+        role: userProfiles.role,
+        count: sql<number>`count(*)`,
+      })
+      .from(userProfiles)
+      .groupBy(userProfiles.role);
+
+    // Top routes
+    const topRoutesResult = await db
+      .select({
+        origin: loads.originCity,
+        destination: loads.destinationCity,
+        count: sql<number>`count(*)`,
+      })
+      .from(loads)
+      .groupBy(loads.originCity, loads.destinationCity)
+      .orderBy(desc(sql`count(*)`))
+      .limit(5);
+
+    // Recent activity (last 7 days)
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+    const recentLoads = await db
+      .select({
+        date: sql<string>`date(${loads.createdAt})`,
+        count: sql<number>`count(*)`,
+      })
+      .from(loads)
+      .where(gte(loads.createdAt, sevenDaysAgo))
+      .groupBy(sql`date(${loads.createdAt})`);
+
+    const recentBids = await db
+      .select({
+        date: sql<string>`date(${bids.createdAt})`,
+        count: sql<number>`count(*)`,
+      })
+      .from(bids)
+      .where(gte(bids.createdAt, sevenDaysAgo))
+      .groupBy(sql`date(${bids.createdAt})`);
+
+    const recentJobsData = await db
+      .select({
+        date: sql<string>`date(${jobs.createdAt})`,
+        count: sql<number>`count(*)`,
+      })
+      .from(jobs)
+      .where(gte(jobs.createdAt, sevenDaysAgo))
+      .groupBy(sql`date(${jobs.createdAt})`);
+
+    // Combine activity data
+    const activityMap = new Map<string, { loads: number; bids: number; jobs: number }>();
+    recentLoads.forEach(l => {
+      const existing = activityMap.get(l.date) || { loads: 0, bids: 0, jobs: 0 };
+      existing.loads = Number(l.count);
+      activityMap.set(l.date, existing);
+    });
+    recentBids.forEach(b => {
+      const existing = activityMap.get(b.date) || { loads: 0, bids: 0, jobs: 0 };
+      existing.bids = Number(b.count);
+      activityMap.set(b.date, existing);
+    });
+    recentJobsData.forEach(j => {
+      const existing = activityMap.get(j.date) || { loads: 0, bids: 0, jobs: 0 };
+      existing.jobs = Number(j.count);
+      activityMap.set(j.date, existing);
+    });
+
+    const recentActivity = Array.from(activityMap.entries())
+      .map(([date, data]) => ({ date, ...data }))
+      .sort((a, b) => a.date.localeCompare(b.date));
+
+    return {
+      loadsByStatus: loadsByStatusResult.map(l => ({ status: l.status, count: Number(l.count) })),
+      recentActivity,
+      topRoutes: topRoutesResult.map(r => ({
+        origin: r.origin,
+        destination: r.destination,
+        count: Number(r.count),
+      })),
+      usersByRole: usersByRoleResult.map(u => ({ role: u.role, count: Number(u.count) })),
     };
   }
 }

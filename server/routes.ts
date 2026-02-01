@@ -589,5 +589,58 @@ export async function registerRoutes(
     }
   });
 
+  // Admin routes
+  const requireAdmin = async (req: any, res: any, next: any) => {
+    const userId = getUserId(req);
+    if (!userId) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+    const profile = await storage.getProfile(userId);
+    if (!profile || profile.role !== "admin") {
+      return res.status(403).json({ message: "Admin access required" });
+    }
+    next();
+  };
+
+  app.get("/api/admin/users", isAuthenticated, requireAdmin, async (req, res) => {
+    try {
+      const users = await storage.getAllUsers();
+      res.json(users);
+    } catch (error) {
+      console.error("Error fetching all users:", error);
+      res.status(500).json({ message: "Failed to fetch users" });
+    }
+  });
+
+  app.get("/api/admin/loads", isAuthenticated, requireAdmin, async (req, res) => {
+    try {
+      const allLoads = await storage.getAllLoads();
+      res.json(allLoads);
+    } catch (error) {
+      console.error("Error fetching all loads:", error);
+      res.status(500).json({ message: "Failed to fetch loads" });
+    }
+  });
+
+  app.get("/api/admin/jobs", isAuthenticated, requireAdmin, async (req, res) => {
+    try {
+      const allJobs = await storage.getAllJobs();
+      res.json(allJobs);
+    } catch (error) {
+      console.error("Error fetching all jobs:", error);
+      res.status(500).json({ message: "Failed to fetch jobs" });
+    }
+  });
+
+  app.get("/api/admin/reports", isAuthenticated, requireAdmin, async (req, res) => {
+    try {
+      const reports = await storage.getAdminReports();
+      res.json(reports);
+    } catch (error) {
+      console.error("Error fetching admin reports:", error);
+      res.status(500).json({ message: "Failed to fetch reports" });
+    }
+  });
+
   return httpServer;
 }

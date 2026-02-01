@@ -18,6 +18,9 @@ import MarketplacePage from "@/pages/marketplace";
 import BidsPage from "@/pages/bids";
 import JobsPage from "@/pages/jobs";
 import TrucksPage from "@/pages/trucks";
+import AdminLoadsPage from "@/pages/admin/loads";
+import AdminUsersPage from "@/pages/admin/users";
+import AdminAnalyticsPage from "@/pages/admin/analytics";
 import NotFound from "@/pages/not-found";
 
 import type { UserProfile } from "@shared/schema";
@@ -61,6 +64,9 @@ function AuthenticatedRoutes() {
       <Route path="/bids" component={BidsPage} />
       <Route path="/jobs" component={JobsPage} />
       <Route path="/trucks" component={TrucksPage} />
+      <Route path="/admin/loads" component={AdminLoadsPage} />
+      <Route path="/admin/users" component={AdminUsersPage} />
+      <Route path="/admin/analytics" component={AdminAnalyticsPage} />
       <Route component={NotFound} />
     </Switch>
   );
