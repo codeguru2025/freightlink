@@ -11,7 +11,8 @@ export const userRoleEnum = pgEnum("user_role", ["shipper", "transporter", "admi
 export const loadStatusEnum = pgEnum("load_status", ["posted", "bidding", "accepted", "in_transit", "delivered", "cancelled"]);
 export const bidStatusEnum = pgEnum("bid_status", ["pending", "accepted", "rejected", "withdrawn"]);
 export const cargoTypeEnum = pgEnum("cargo_type", ["general", "perishable", "hazardous", "fragile", "livestock", "machinery", "bulk", "containerized"]);
-export const documentTypeEnum = pgEnum("document_type", ["id_document", "drivers_license", "vehicle_registration", "insurance", "proof_of_delivery", "invoice", "other"]);
+export const documentTypeEnum = pgEnum("document_type", ["id_document", "drivers_license", "vehicle_registration", "insurance", "proof_of_delivery", "invoice", "delivery_note", "shipment_note", "waybill", "signed_pod", "other"]);
+export const paymentStatusEnum = pgEnum("payment_status", ["pending", "pod_submitted", "pod_confirmed", "payment_requested", "paid"]);
 export const documentStatusEnum = pgEnum("document_status", ["pending", "verified", "rejected"]);
 export const disputeStatusEnum = pgEnum("dispute_status", ["open", "under_review", "resolved", "closed"]);
 
@@ -104,14 +105,21 @@ export const jobs = pgTable("jobs", {
   agreedAmount: decimal("agreed_amount", { precision: 12, scale: 2 }).notNull(),
   currency: varchar("currency").default("USD"),
   status: loadStatusEnum("status").notNull().default("accepted"),
+  paymentStatus: paymentStatusEnum("payment_status").notNull().default("pending"),
   pickupConfirmedAt: timestamp("pickup_confirmed_at"),
   deliveryConfirmedAt: timestamp("delivery_confirmed_at"),
+  podSubmittedAt: timestamp("pod_submitted_at"),
+  podConfirmedAt: timestamp("pod_confirmed_at"),
+  paymentRequestedAt: timestamp("payment_requested_at"),
+  paidAt: timestamp("paid_at"),
+  podNotes: text("pod_notes"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 }, (table) => [
   index("idx_jobs_shipper").on(table.shipperId),
   index("idx_jobs_transporter").on(table.transporterId),
   index("idx_jobs_status").on(table.status),
+  index("idx_jobs_payment_status").on(table.paymentStatus),
 ]);
 
 // Documents - for verification and proof of delivery
@@ -322,9 +330,13 @@ export type UserRole = typeof USER_ROLES[number];
 export type LoadStatus = typeof LOAD_STATUSES[number];
 export type BidStatus = typeof BID_STATUSES[number];
 export type CargoType = typeof CARGO_TYPES[number];
-export const DOCUMENT_TYPES = ["id_document", "drivers_license", "vehicle_registration", "insurance", "proof_of_delivery", "invoice", "other"] as const;
+export const DOCUMENT_TYPES = ["id_document", "drivers_license", "vehicle_registration", "insurance", "proof_of_delivery", "invoice", "delivery_note", "shipment_note", "waybill", "signed_pod", "other"] as const;
 export const DOCUMENT_STATUSES = ["pending", "verified", "rejected"] as const;
 export const DISPUTE_STATUSES = ["open", "under_review", "resolved", "closed"] as const;
+export const PAYMENT_STATUSES = ["pending", "pod_submitted", "pod_confirmed", "payment_requested", "paid"] as const;
+export const POD_DOCUMENT_TYPES = ["proof_of_delivery", "invoice", "delivery_note", "shipment_note", "waybill", "signed_pod"] as const;
 export type DocumentType = typeof DOCUMENT_TYPES[number];
 export type DocumentStatus = typeof DOCUMENT_STATUSES[number];
 export type DisputeStatus = typeof DISPUTE_STATUSES[number];
+export type PaymentStatus = typeof PAYMENT_STATUSES[number];
+export type PodDocumentType = typeof POD_DOCUMENT_TYPES[number];

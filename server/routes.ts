@@ -34,11 +34,16 @@ const createBidSchema = insertBidSchema.omit({ loadId: true, transporterId: true
 
 const createTruckSchema = insertTruckSchema.omit({ ownerId: true });
 
-// Document validation
+// Document validation - includes all POD document types
 const createDocumentSchema = insertDocumentSchema.omit({ userId: true, status: true, verifiedBy: true, verifiedAt: true, rejectionReason: true }).extend({
-  documentType: z.enum(["id_document", "drivers_license", "vehicle_registration", "insurance", "proof_of_delivery", "invoice", "other"]),
+  documentType: z.enum(["id_document", "drivers_license", "vehicle_registration", "insurance", "proof_of_delivery", "invoice", "delivery_note", "shipment_note", "waybill", "signed_pod", "other"]),
   fileName: z.string().min(1, "File name is required"),
   fileUrl: z.string().url("Valid URL is required"),
+});
+
+// POD submission validation
+const podSubmissionSchema = z.object({
+  notes: z.string().optional(),
 });
 
 const verifyDocumentSchema = z.object({
@@ -549,6 +554,191 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error updating job status:", error);
       res.status(500).json({ message: "Failed to update job status" });
+    }
+  });
+
+  // POD (Proof of Delivery) routes
+  app.get("/api/jobs/:id/pod-documents", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const { id } = req.params;
+      const job = await storage.getJob(id);
+      if (!job) {
+        return res.status(404).json({ message: "Job not found" });
+      }
+
+      if (job.shipperId !== userId && job.transporterId !== userId) {
+        const profile = await storage.getProfile(userId);
+        if (profile?.role !== "admin") {
+          return res.status(403).json({ message: "Not authorized" });
+        }
+      }
+
+      const podDocuments = await storage.getPodDocuments(id);
+      res.json(podDocuments);
+    } catch (error) {
+      console.error("Error fetching POD documents:", error);
+      res.status(500).json({ message: "Failed to fetch POD documents" });
+    }
+  });
+
+  app.post("/api/jobs/:id/submit-pod", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const { id } = req.params;
+      const job = await storage.getJob(id);
+      if (!job) {
+        return res.status(404).json({ message: "Job not found" });
+      }
+
+      // Only transporter can submit POD
+      if (job.transporterId !== userId) {
+        return res.status(403).json({ message: "Only the transporter can submit POD" });
+      }
+
+      // Job must be delivered
+      if (job.status !== "delivered") {
+        return res.status(400).json({ message: "Job must be marked as delivered before submitting POD" });
+      }
+
+      // Validate optional notes with Zod
+      const validationResult = podSubmissionSchema.safeParse(req.body || {});
+      const { notes } = validationResult.success ? validationResult.data : { notes: undefined };
+      const updated = await storage.submitPod(id, notes);
+      res.json(updated);
+    } catch (error) {
+      console.error("Error submitting POD:", error);
+      res.status(500).json({ message: "Failed to submit POD" });
+    }
+  });
+
+  app.post("/api/jobs/:id/confirm-pod", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const { id } = req.params;
+      const job = await storage.getJob(id);
+      if (!job) {
+        return res.status(404).json({ message: "Job not found" });
+      }
+
+      // Only shipper can confirm POD
+      if (job.shipperId !== userId) {
+        return res.status(403).json({ message: "Only the shipper can confirm POD" });
+      }
+
+      // POD must be submitted first
+      if (job.paymentStatus !== "pod_submitted") {
+        return res.status(400).json({ message: "POD must be submitted before confirmation" });
+      }
+
+      const updated = await storage.confirmPod(id);
+      res.json(updated);
+    } catch (error) {
+      console.error("Error confirming POD:", error);
+      res.status(500).json({ message: "Failed to confirm POD" });
+    }
+  });
+
+  app.post("/api/jobs/:id/request-payment", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const { id } = req.params;
+      const job = await storage.getJob(id);
+      if (!job) {
+        return res.status(404).json({ message: "Job not found" });
+      }
+
+      // Only transporter can request payment
+      if (job.transporterId !== userId) {
+        return res.status(403).json({ message: "Only the transporter can request payment" });
+      }
+
+      // POD must be confirmed first
+      if (job.paymentStatus !== "pod_confirmed") {
+        return res.status(400).json({ message: "POD must be confirmed before requesting payment" });
+      }
+
+      const updated = await storage.requestPayment(id);
+      res.json(updated);
+    } catch (error) {
+      console.error("Error requesting payment:", error);
+      res.status(500).json({ message: "Failed to request payment" });
+    }
+  });
+
+  app.post("/api/jobs/:id/mark-paid", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const { id } = req.params;
+      const job = await storage.getJob(id);
+      if (!job) {
+        return res.status(404).json({ message: "Job not found" });
+      }
+
+      // Only shipper can mark as paid
+      if (job.shipperId !== userId) {
+        return res.status(403).json({ message: "Only the shipper can mark payment as complete" });
+      }
+
+      // Payment must be requested first
+      if (job.paymentStatus !== "payment_requested") {
+        return res.status(400).json({ message: "Payment must be requested before marking as paid" });
+      }
+
+      const updated = await storage.markAsPaid(id);
+      res.json(updated);
+    } catch (error) {
+      console.error("Error marking job as paid:", error);
+      res.status(500).json({ message: "Failed to mark job as paid" });
+    }
+  });
+
+  app.get("/api/pod-jobs", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const profile = await storage.getProfile(userId);
+      if (!profile) {
+        return res.status(404).json({ message: "Profile not found" });
+      }
+
+      if (profile.role !== "shipper" && profile.role !== "transporter") {
+        return res.status(403).json({ message: "Only shippers and transporters can access POD jobs" });
+      }
+
+      const { paymentStatus } = req.query;
+      const jobs = await storage.getJobsByPaymentStatus(
+        userId,
+        profile.role as 'shipper' | 'transporter',
+        paymentStatus as any
+      );
+      res.json(jobs);
+    } catch (error) {
+      console.error("Error fetching POD jobs:", error);
+      res.status(500).json({ message: "Failed to fetch POD jobs" });
     }
   });
 

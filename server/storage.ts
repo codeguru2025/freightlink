@@ -30,7 +30,9 @@ import {
   type LoadStatus,
   type BidStatus,
   type DocumentStatus,
-  type DisputeStatus
+  type DisputeStatus,
+  type PaymentStatus,
+  POD_DOCUMENT_TYPES
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, desc, inArray, sql, gte } from "drizzle-orm";
@@ -112,6 +114,15 @@ export interface IStorage {
   getDispute(id: string): Promise<(Dispute & { job?: Job; raisedBy?: UserProfile; against?: UserProfile }) | undefined>;
   createDispute(dispute: InsertDispute): Promise<Dispute>;
   updateDisputeStatus(id: string, status: DisputeStatus, resolution?: string, resolvedById?: string): Promise<Dispute | undefined>;
+
+  // POD (Proof of Delivery) - Payment workflow
+  getPodDocuments(jobId: string): Promise<Document[]>;
+  submitPod(jobId: string, notes?: string): Promise<Job | undefined>;
+  confirmPod(jobId: string): Promise<Job | undefined>;
+  requestPayment(jobId: string): Promise<Job | undefined>;
+  markAsPaid(jobId: string): Promise<Job | undefined>;
+  getJobsByPaymentStatus(userId: string, role: 'shipper' | 'transporter', paymentStatus?: PaymentStatus): Promise<(Job & { load?: Load; podDocuments?: Document[] })[]>;
+  updateJobPaymentStatus(jobId: string, paymentStatus: PaymentStatus): Promise<Job | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -670,6 +681,104 @@ export class DatabaseStorage implements IStorage {
       updateData.resolvedAt = new Date();
     }
     const [updated] = await db.update(disputes).set(updateData).where(eq(disputes.id, id)).returning();
+    return updated || undefined;
+  }
+
+  // POD (Proof of Delivery) - Payment workflow
+  async getPodDocuments(jobId: string): Promise<Document[]> {
+    const podTypes = POD_DOCUMENT_TYPES as readonly string[];
+    return await db.select().from(documents)
+      .where(and(
+        eq(documents.jobId, jobId),
+        inArray(documents.documentType, podTypes as any)
+      ))
+      .orderBy(desc(documents.createdAt));
+  }
+
+  async submitPod(jobId: string, notes?: string): Promise<Job | undefined> {
+    const updateData: any = {
+      paymentStatus: 'pod_submitted' as PaymentStatus,
+      podSubmittedAt: new Date(),
+      updatedAt: new Date(),
+    };
+    if (notes) {
+      updateData.podNotes = notes;
+    }
+    const [updated] = await db.update(jobs).set(updateData).where(eq(jobs.id, jobId)).returning();
+    return updated || undefined;
+  }
+
+  async confirmPod(jobId: string): Promise<Job | undefined> {
+    const [updated] = await db.update(jobs).set({
+      paymentStatus: 'pod_confirmed' as PaymentStatus,
+      podConfirmedAt: new Date(),
+      updatedAt: new Date(),
+    }).where(eq(jobs.id, jobId)).returning();
+    return updated || undefined;
+  }
+
+  async requestPayment(jobId: string): Promise<Job | undefined> {
+    const [updated] = await db.update(jobs).set({
+      paymentStatus: 'payment_requested' as PaymentStatus,
+      paymentRequestedAt: new Date(),
+      updatedAt: new Date(),
+    }).where(eq(jobs.id, jobId)).returning();
+    return updated || undefined;
+  }
+
+  async markAsPaid(jobId: string): Promise<Job | undefined> {
+    const [updated] = await db.update(jobs).set({
+      paymentStatus: 'paid' as PaymentStatus,
+      paidAt: new Date(),
+      updatedAt: new Date(),
+    }).where(eq(jobs.id, jobId)).returning();
+    return updated || undefined;
+  }
+
+  async getJobsByPaymentStatus(userId: string, role: 'shipper' | 'transporter', paymentStatus?: PaymentStatus): Promise<(Job & { load?: Load; podDocuments?: Document[] })[]> {
+    let query;
+    if (role === 'shipper') {
+      query = paymentStatus
+        ? db.select().from(jobs).where(and(eq(jobs.shipperId, userId), eq(jobs.paymentStatus, paymentStatus)))
+        : db.select().from(jobs).where(eq(jobs.shipperId, userId));
+    } else {
+      query = paymentStatus
+        ? db.select().from(jobs).where(and(eq(jobs.transporterId, userId), eq(jobs.paymentStatus, paymentStatus)))
+        : db.select().from(jobs).where(eq(jobs.transporterId, userId));
+    }
+
+    const jobList = await query.orderBy(desc(jobs.updatedAt));
+    
+    const jobsWithDetails = await Promise.all(
+      jobList.map(async (job) => {
+        const [load] = await db.select().from(loads).where(eq(loads.id, job.loadId));
+        const podDocuments = await this.getPodDocuments(job.id);
+        return { ...job, load, podDocuments };
+      })
+    );
+
+    return jobsWithDetails;
+  }
+
+  async updateJobPaymentStatus(jobId: string, paymentStatus: PaymentStatus): Promise<Job | undefined> {
+    const updateData: any = { paymentStatus, updatedAt: new Date() };
+    
+    switch (paymentStatus) {
+      case 'pod_submitted':
+        updateData.podSubmittedAt = new Date();
+        break;
+      case 'pod_confirmed':
+        updateData.podConfirmedAt = new Date();
+        break;
+      case 'payment_requested':
+        updateData.paymentRequestedAt = new Date();
+        break;
+      case 'paid':
+        updateData.paidAt = new Date();
+        break;
+    }
+
+    const [updated] = await db.update(jobs).set(updateData).where(eq(jobs.id, jobId)).returning();
     return updated || undefined;
   }
 }

@@ -39,6 +39,7 @@ import {
   MessageSquare,
   Star,
   AlertTriangle,
+  Receipt,
 } from "lucide-react";
 import type { UserProfile } from "@shared/schema";
 import logoPath from "@assets/ChatGPT_Image_Feb_1,_2026,_09_08_34_AM_1769930479384.png";
@@ -57,6 +58,7 @@ export function AppSidebar() {
     { title: "Post Load", url: "/loads/new", icon: PlusCircle },
     { title: "My Loads", url: "/loads", icon: Package },
     { title: "Active Jobs", url: "/jobs", icon: Briefcase },
+    { title: "POD & Payments", url: "/pod", icon: Receipt },
     { title: "Messages", url: "/messages", icon: MessageSquare },
     { title: "Documents", url: "/documents", icon: FileText },
     { title: "My Reviews", url: "/reviews", icon: Star },
@@ -67,6 +69,7 @@ export function AppSidebar() {
     { title: "Available Loads", url: "/marketplace", icon: List },
     { title: "My Bids", url: "/bids", icon: Gavel },
     { title: "My Jobs", url: "/jobs", icon: Briefcase },
+    { title: "POD & Payments", url: "/pod", icon: Receipt },
     { title: "My Trucks", url: "/trucks", icon: TruckIcon },
     { title: "Messages", url: "/messages", icon: MessageSquare },
     { title: "Documents", url: "/documents", icon: FileText },

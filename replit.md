@@ -6,6 +6,16 @@ FreightLink ZW is a digital freight marketplace platform for Zimbabwe that conne
 
 ## Recent Changes
 
+- **2026-02-03**: Proof of Delivery (POD) & Payment System
+  - Added comprehensive POD workflow for triggering payments after delivery
+  - New document types: delivery_note, shipment_note, waybill, signed_pod
+  - Payment status tracking: pending → pod_submitted → pod_confirmed → payment_requested → paid
+  - Dedicated POD management page (/pod) with tabs for each payment status
+  - Job detail page integration with POD submission, confirmation, and payment actions
+  - Transporters: Upload POD documents, submit POD, request payment
+  - Shippers: Confirm POD, mark payment as complete
+  - New sidebar navigation "POD & Payments" for both shipper and transporter roles
+
 - **2026-02-01**: Job Detail Page Integration
   - Created comprehensive job detail page (/jobs/:id) with full feature integration
   - Messaging integration: "Message" button navigates to conversations with partner
@@ -48,6 +58,7 @@ The application enables:
 - Shippers to post cargo loads and accept bids from transporters
 - Transporters to browse available loads, submit bids, and manage their truck fleet
 - Job tracking and status management throughout the delivery lifecycle
+- Proof of Delivery (POD) workflow for payment triggering
 - Document upload and verification for user/vehicle credentials
 - Messaging between shippers and transporters
 - Ratings and reviews for completed jobs

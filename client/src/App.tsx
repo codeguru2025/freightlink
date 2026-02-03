@@ -28,6 +28,7 @@ import ReviewsPage from "@/pages/reviews";
 import JobDetailPage from "@/pages/job-detail";
 import AdminDocumentsPage from "@/pages/admin-documents";
 import AdminDisputesPage from "@/pages/admin-disputes";
+import PodManagementPage from "@/pages/pod-management";
 import NotFound from "@/pages/not-found";
 
 import type { UserProfile } from "@shared/schema";
@@ -87,6 +88,7 @@ function AuthenticatedRoutes() {
       <Route path="/documents" component={DocumentsPage} />
       <Route path="/messages" component={MessagesPage} />
       <Route path="/reviews" component={ReviewsPage} />
+      <Route path="/pod" component={PodManagementPage} />
       <Route path="/admin/loads">{() => <AdminRoute component={AdminLoadsPage} />}</Route>
       <Route path="/admin/users">{() => <AdminRoute component={AdminUsersPage} />}</Route>
       <Route path="/admin/documents">{() => <AdminRoute component={AdminDocumentsPage} />}</Route>

@@ -29,17 +29,40 @@ import {
   FileText,
   Upload,
   CheckCircle,
-  User
+  User,
+  Send,
+  CreditCard,
+  Clock,
+  Receipt
 } from "lucide-react";
 import { format } from "date-fns";
 import { useState } from "react";
-import type { Job, Load, UserProfile, Review, Document as DocumentType, LoadStatus } from "@shared/schema";
+import type { Job, Load, UserProfile, Review, Document as DocumentType, LoadStatus, PaymentStatus } from "@shared/schema";
 
 const documentUploadSchema = z.object({
-  documentType: z.enum(["proof_of_delivery", "invoice", "insurance", "other"]),
+  documentType: z.enum(["proof_of_delivery", "invoice", "insurance", "delivery_note", "shipment_note", "waybill", "signed_pod", "other"]),
   fileName: z.string().min(1, "File name is required"),
   fileUrl: z.string().url("Please enter a valid URL"),
 });
+
+function PaymentStatusBadge({ status }: { status: PaymentStatus }) {
+  const variants: Record<PaymentStatus, { variant: "default" | "secondary" | "destructive" | "outline"; icon: React.ReactNode; label: string }> = {
+    pending: { variant: "secondary", icon: <Clock className="w-3 h-3 mr-1" />, label: "Awaiting POD" },
+    pod_submitted: { variant: "outline", icon: <Send className="w-3 h-3 mr-1" />, label: "POD Submitted" },
+    pod_confirmed: { variant: "outline", icon: <CheckCircle className="w-3 h-3 mr-1" />, label: "POD Confirmed" },
+    payment_requested: { variant: "default", icon: <DollarSign className="w-3 h-3 mr-1" />, label: "Payment Requested" },
+    paid: { variant: "default", icon: <CreditCard className="w-3 h-3 mr-1" />, label: "Paid" },
+  };
+
+  const { variant, icon, label } = variants[status] || variants.pending;
+  
+  return (
+    <Badge variant={variant} className="flex items-center" data-testid={`badge-payment-status-${status}`}>
+      {icon}
+      {label}
+    </Badge>
+  );
+}
 
 interface JobWithDetails extends Job {
   load?: Load;
@@ -191,6 +214,62 @@ export default function JobDetailPage() {
     uploadDocMutation.mutate(data);
   };
 
+  const submitPodMutation = useMutation({
+    mutationFn: async () => {
+      return apiRequest("POST", `/api/jobs/${jobId}/submit-pod`, {});
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/jobs", jobId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/pod-jobs"] });
+      toast({ title: "POD submitted successfully" });
+    },
+    onError: () => {
+      toast({ title: "Failed to submit POD", variant: "destructive" });
+    },
+  });
+
+  const confirmPodMutation = useMutation({
+    mutationFn: async () => {
+      return apiRequest("POST", `/api/jobs/${jobId}/confirm-pod`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/jobs", jobId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/pod-jobs"] });
+      toast({ title: "POD confirmed successfully" });
+    },
+    onError: () => {
+      toast({ title: "Failed to confirm POD", variant: "destructive" });
+    },
+  });
+
+  const requestPaymentMutation = useMutation({
+    mutationFn: async () => {
+      return apiRequest("POST", `/api/jobs/${jobId}/request-payment`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/jobs", jobId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/pod-jobs"] });
+      toast({ title: "Payment requested successfully" });
+    },
+    onError: () => {
+      toast({ title: "Failed to request payment", variant: "destructive" });
+    },
+  });
+
+  const markPaidMutation = useMutation({
+    mutationFn: async () => {
+      return apiRequest("POST", `/api/jobs/${jobId}/mark-paid`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/jobs", jobId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/pod-jobs"] });
+      toast({ title: "Payment marked as complete" });
+    },
+    onError: () => {
+      toast({ title: "Failed to mark as paid", variant: "destructive" });
+    },
+  });
+
   const startConversation = () => {
     const partnerId = profile?.role === "shipper" ? job?.transporterId : job?.shipperId;
     if (partnerId) {
@@ -202,6 +281,14 @@ export default function JobDetailPage() {
   const isShipper = profile?.role === "shipper";
   const isDelivered = job?.status === "delivered";
   const hasReviewed = reviews?.some(r => r.reviewerId === profile?.userId);
+
+  const podDocCount = documents?.filter(d => 
+    ['proof_of_delivery', 'invoice', 'delivery_note', 'shipment_note', 'waybill', 'signed_pod'].includes(d.documentType)
+  ).length || 0;
+  const canSubmitPod = isTransporter && job?.status === "delivered" && job?.paymentStatus === "pending" && podDocCount > 0;
+  const canConfirmPod = isShipper && job?.paymentStatus === "pod_submitted";
+  const canRequestPayment = isTransporter && job?.paymentStatus === "pod_confirmed";
+  const canMarkPaid = isShipper && job?.paymentStatus === "payment_requested";
 
   if (isLoading) {
     return (
@@ -310,6 +397,72 @@ export default function JobDetailPage() {
                 </div>
               </CardContent>
             </Card>
+
+            {isDelivered && (
+              <Card className="border-primary/30">
+                <CardHeader>
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <CardTitle className="flex items-center gap-2">
+                        <Receipt className="h-5 w-5" />
+                        Proof of Delivery & Payment
+                      </CardTitle>
+                      <CardDescription>Manage POD submission and payment workflow</CardDescription>
+                    </div>
+                    <PaymentStatusBadge status={job.paymentStatus as PaymentStatus} />
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="p-3 bg-muted/30 rounded-lg">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-muted-foreground">POD Documents uploaded</span>
+                      <span className="font-medium">{podDocCount}</span>
+                    </div>
+                  </div>
+                  
+                  <div className="flex flex-wrap gap-2">
+                    {canSubmitPod && (
+                      <Button onClick={() => submitPodMutation.mutate()} disabled={submitPodMutation.isPending} data-testid="button-submit-pod">
+                        <Send className="w-4 h-4 mr-2" />
+                        Submit POD
+                      </Button>
+                    )}
+                    {canConfirmPod && (
+                      <Button onClick={() => confirmPodMutation.mutate()} disabled={confirmPodMutation.isPending} data-testid="button-confirm-pod">
+                        <CheckCircle className="w-4 h-4 mr-2" />
+                        Confirm POD
+                      </Button>
+                    )}
+                    {canRequestPayment && (
+                      <Button onClick={() => requestPaymentMutation.mutate()} disabled={requestPaymentMutation.isPending} data-testid="button-request-payment">
+                        <DollarSign className="w-4 h-4 mr-2" />
+                        Request Payment
+                      </Button>
+                    )}
+                    {canMarkPaid && (
+                      <Button onClick={() => markPaidMutation.mutate()} disabled={markPaidMutation.isPending} variant="default" data-testid="button-mark-paid">
+                        <CreditCard className="w-4 h-4 mr-2" />
+                        Mark as Paid
+                      </Button>
+                    )}
+                    <Link href="/pod">
+                      <Button variant="outline" data-testid="button-view-pod-page">
+                        View POD Dashboard
+                      </Button>
+                    </Link>
+                  </div>
+
+                  {job.paymentStatus === "paid" && job.paidAt && (
+                    <div className="p-3 bg-primary/10 rounded-lg">
+                      <div className="flex items-center gap-2 text-primary">
+                        <CheckCircle className="h-5 w-5" />
+                        <span className="font-medium">Payment completed on {format(new Date(job.paidAt), "MMM d, yyyy")}</span>
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
 
             {isDelivered && (
               <Card>
