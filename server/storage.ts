@@ -8,6 +8,8 @@ import {
   messages,
   reviews,
   disputes,
+  wallets,
+  walletTransactions,
   users,
   type UserProfile, 
   type InsertUserProfile,
@@ -27,12 +29,18 @@ import {
   type InsertReview,
   type Dispute,
   type InsertDispute,
+  type Wallet,
+  type InsertWallet,
+  type WalletTransaction,
+  type InsertWalletTransaction,
   type LoadStatus,
   type BidStatus,
   type DocumentStatus,
   type DisputeStatus,
   type PaymentStatus,
-  POD_DOCUMENT_TYPES
+  type TransactionStatus,
+  POD_DOCUMENT_TYPES,
+  COMMISSION_RATE
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, desc, inArray, sql, gte } from "drizzle-orm";
@@ -123,6 +131,22 @@ export interface IStorage {
   markAsPaid(jobId: string): Promise<Job | undefined>;
   getJobsByPaymentStatus(userId: string, role: 'shipper' | 'transporter', paymentStatus?: PaymentStatus): Promise<(Job & { load?: Load; podDocuments?: Document[] })[]>;
   updateJobPaymentStatus(jobId: string, paymentStatus: PaymentStatus): Promise<Job | undefined>;
+
+  // Wallet operations
+  getWallet(userId: string): Promise<Wallet | undefined>;
+  createWallet(wallet: InsertWallet): Promise<Wallet>;
+  getOrCreateWallet(userId: string): Promise<Wallet>;
+  updateWalletBalance(userId: string, amount: number): Promise<Wallet | undefined>;
+  deductCommission(userId: string, jobId: string, amount: number): Promise<WalletTransaction | undefined>;
+  
+  // Wallet transactions
+  getWalletTransactions(userId: string): Promise<WalletTransaction[]>;
+  createWalletTransaction(transaction: InsertWalletTransaction): Promise<WalletTransaction>;
+  updateTransactionStatus(id: string, status: TransactionStatus, paynowReference?: string): Promise<WalletTransaction | undefined>;
+  getTransactionByReference(reference: string): Promise<WalletTransaction | undefined>;
+  
+  // Marketplace with wallet filter
+  getAvailableLoadsForTransporter(userId: string): Promise<Load[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -780,6 +804,119 @@ export class DatabaseStorage implements IStorage {
 
     const [updated] = await db.update(jobs).set(updateData).where(eq(jobs.id, jobId)).returning();
     return updated || undefined;
+  }
+
+  // Wallet operations
+  async getWallet(userId: string): Promise<Wallet | undefined> {
+    const [wallet] = await db.select().from(wallets).where(eq(wallets.userId, userId));
+    return wallet || undefined;
+  }
+
+  async createWallet(wallet: InsertWallet): Promise<Wallet> {
+    const [created] = await db.insert(wallets).values(wallet).returning();
+    return created;
+  }
+
+  async getOrCreateWallet(userId: string): Promise<Wallet> {
+    const existing = await this.getWallet(userId);
+    if (existing) return existing;
+    return await this.createWallet({ userId, balance: "0", currency: "USD" });
+  }
+
+  async updateWalletBalance(userId: string, amount: number): Promise<Wallet | undefined> {
+    const wallet = await this.getOrCreateWallet(userId);
+    const newBalance = Number(wallet.balance) + amount;
+    const [updated] = await db
+      .update(wallets)
+      .set({ balance: newBalance.toString(), updatedAt: new Date() })
+      .where(eq(wallets.userId, userId))
+      .returning();
+    return updated || undefined;
+  }
+
+  async deductCommission(userId: string, jobId: string, amount: number): Promise<WalletTransaction | undefined> {
+    const wallet = await this.getOrCreateWallet(userId);
+    const commission = amount * COMMISSION_RATE;
+    
+    if (Number(wallet.balance) < commission) {
+      throw new Error("Insufficient wallet balance for commission");
+    }
+
+    // Deduct from wallet
+    await this.updateWalletBalance(userId, -commission);
+
+    // Create transaction record
+    const transaction = await this.createWalletTransaction({
+      walletId: wallet.id,
+      userId,
+      type: "commission_deduction",
+      amount: commission.toString(),
+      currency: wallet.currency || "USD",
+      status: "completed",
+      jobId,
+      description: `Commission deduction (${COMMISSION_RATE * 100}%) for job`,
+      completedAt: new Date(),
+    });
+
+    return transaction;
+  }
+
+  // Wallet transactions
+  async getWalletTransactions(userId: string): Promise<WalletTransaction[]> {
+    return await db
+      .select()
+      .from(walletTransactions)
+      .where(eq(walletTransactions.userId, userId))
+      .orderBy(desc(walletTransactions.createdAt));
+  }
+
+  async createWalletTransaction(transaction: InsertWalletTransaction): Promise<WalletTransaction> {
+    const [created] = await db.insert(walletTransactions).values(transaction).returning();
+    return created;
+  }
+
+  async updateTransactionStatus(id: string, status: TransactionStatus, paynowReference?: string): Promise<WalletTransaction | undefined> {
+    const updateData: any = { status };
+    if (status === 'completed') {
+      updateData.completedAt = new Date();
+    }
+    if (paynowReference) {
+      updateData.paynowReference = paynowReference;
+    }
+    const [updated] = await db
+      .update(walletTransactions)
+      .set(updateData)
+      .where(eq(walletTransactions.id, id))
+      .returning();
+    return updated || undefined;
+  }
+
+  async getTransactionByReference(reference: string): Promise<WalletTransaction | undefined> {
+    const [transaction] = await db
+      .select()
+      .from(walletTransactions)
+      .where(eq(walletTransactions.reference, reference));
+    return transaction || undefined;
+  }
+
+  // Marketplace with wallet filter - only show loads where commission can be covered
+  async getAvailableLoadsForTransporter(userId: string): Promise<Load[]> {
+    const wallet = await this.getOrCreateWallet(userId);
+    const walletBalance = Number(wallet.balance);
+
+    // Get all posted loads
+    const allLoads = await db
+      .select()
+      .from(loads)
+      .where(eq(loads.status, "posted"))
+      .orderBy(desc(loads.createdAt));
+
+    // Filter loads where wallet balance can cover commission
+    return allLoads.filter(load => {
+      const budget = Number(load.budget || 0);
+      const commission = budget * COMMISSION_RATE;
+      return walletBalance >= commission;
+    });
   }
 }
 

@@ -15,6 +15,8 @@ export const documentTypeEnum = pgEnum("document_type", ["id_document", "drivers
 export const paymentStatusEnum = pgEnum("payment_status", ["pending", "pod_submitted", "pod_confirmed", "payment_requested", "paid"]);
 export const documentStatusEnum = pgEnum("document_status", ["pending", "verified", "rejected"]);
 export const disputeStatusEnum = pgEnum("dispute_status", ["open", "under_review", "resolved", "closed"]);
+export const transactionTypeEnum = pgEnum("transaction_type", ["deposit", "commission_deduction", "refund", "withdrawal"]);
+export const transactionStatusEnum = pgEnum("transaction_status", ["pending", "completed", "failed", "cancelled"]);
 
 // User Profiles - extends auth users with role-specific data
 export const userProfiles = pgTable("user_profiles", {
@@ -192,6 +194,41 @@ export const disputes = pgTable("disputes", {
   index("idx_disputes_status").on(table.status),
 ]);
 
+// Wallets - transporter wallet for commission payments
+export const wallets = pgTable("wallets", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().unique(),
+  balance: decimal("balance", { precision: 12, scale: 2 }).notNull().default("0"),
+  currency: varchar("currency").default("USD"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_wallets_user").on(table.userId),
+]);
+
+// Wallet Transactions - track all wallet movements
+export const walletTransactions = pgTable("wallet_transactions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  walletId: varchar("wallet_id").notNull(),
+  userId: varchar("user_id").notNull(),
+  type: transactionTypeEnum("type").notNull(),
+  amount: decimal("amount", { precision: 12, scale: 2 }).notNull(),
+  currency: varchar("currency").default("USD"),
+  status: transactionStatusEnum("status").notNull().default("pending"),
+  reference: varchar("reference"),
+  jobId: varchar("job_id"),
+  paynowPollUrl: text("paynow_poll_url"),
+  paynowReference: varchar("paynow_reference"),
+  description: text("description"),
+  createdAt: timestamp("created_at").defaultNow(),
+  completedAt: timestamp("completed_at"),
+}, (table) => [
+  index("idx_wallet_transactions_wallet").on(table.walletId),
+  index("idx_wallet_transactions_user").on(table.userId),
+  index("idx_wallet_transactions_status").on(table.status),
+  index("idx_wallet_transactions_reference").on(table.reference),
+]);
+
 // Relations
 export const userProfilesRelations = relations(userProfiles, ({ many }) => ({
   trucks: many(trucks),
@@ -300,6 +337,17 @@ export const insertDisputeSchema = createInsertSchema(disputes).omit({
   updatedAt: true,
 });
 
+export const insertWalletSchema = createInsertSchema(wallets).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertWalletTransactionSchema = createInsertSchema(walletTransactions).omit({
+  id: true,
+  createdAt: true,
+});
+
 // Types
 export type UserProfile = typeof userProfiles.$inferSelect;
 export type InsertUserProfile = z.infer<typeof insertUserProfileSchema>;
@@ -319,6 +367,10 @@ export type Review = typeof reviews.$inferSelect;
 export type InsertReview = z.infer<typeof insertReviewSchema>;
 export type Dispute = typeof disputes.$inferSelect;
 export type InsertDispute = z.infer<typeof insertDisputeSchema>;
+export type Wallet = typeof wallets.$inferSelect;
+export type InsertWallet = z.infer<typeof insertWalletSchema>;
+export type WalletTransaction = typeof walletTransactions.$inferSelect;
+export type InsertWalletTransaction = z.infer<typeof insertWalletTransactionSchema>;
 
 // Enums for frontend
 export const USER_ROLES = ["shipper", "transporter", "admin"] as const;
@@ -340,3 +392,10 @@ export type DocumentStatus = typeof DOCUMENT_STATUSES[number];
 export type DisputeStatus = typeof DISPUTE_STATUSES[number];
 export type PaymentStatus = typeof PAYMENT_STATUSES[number];
 export type PodDocumentType = typeof POD_DOCUMENT_TYPES[number];
+export const TRANSACTION_TYPES = ["deposit", "commission_deduction", "refund", "withdrawal"] as const;
+export const TRANSACTION_STATUSES = ["pending", "completed", "failed", "cancelled"] as const;
+export type TransactionType = typeof TRANSACTION_TYPES[number];
+export type TransactionStatus = typeof TRANSACTION_STATUSES[number];
+
+// Commission rate (10%)
+export const COMMISSION_RATE = 0.10;
