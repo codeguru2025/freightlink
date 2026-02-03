@@ -58,14 +58,18 @@ export const loads = pgTable("loads", {
   description: text("description"),
   cargoType: cargoTypeEnum("cargo_type").notNull().default("general"),
   weight: decimal("weight", { precision: 10, scale: 2 }).notNull(),
-  weightUnit: varchar("weight_unit").default("kg"),
+  weightUnit: varchar("weight_unit").default("tonnes"), // Changed default to tonnes
   originCity: varchar("origin_city").notNull(),
   originAddress: text("origin_address"),
   destinationCity: varchar("destination_city").notNull(),
   destinationAddress: text("destination_address"),
+  distanceKm: decimal("distance_km", { precision: 10, scale: 2 }), // Distance in km (user entered or estimated)
   pickupDate: timestamp("pickup_date"),
   deliveryDate: timestamp("delivery_date"),
-  budget: decimal("budget", { precision: 12, scale: 2 }),
+  budget: decimal("budget", { precision: 12, scale: 2 }), // Kept for backward compatibility, now app-calculated base price
+  basePrice: decimal("base_price", { precision: 12, scale: 2 }), // App-calculated base transport price
+  shipperTip: decimal("shipper_tip", { precision: 12, scale: 2 }).default("0"), // Optional increase by shipper
+  totalPrice: decimal("total_price", { precision: 12, scale: 2 }), // basePrice + shipperTip
   currency: varchar("currency").default("USD"),
   status: loadStatusEnum("status").notNull().default("posted"),
   specialInstructions: text("special_instructions"),
@@ -397,5 +401,19 @@ export const TRANSACTION_STATUSES = ["pending", "completed", "failed", "cancelle
 export type TransactionType = typeof TRANSACTION_TYPES[number];
 export type TransactionStatus = typeof TRANSACTION_STATUSES[number];
 
-// Commission rate (10%)
+// Pricing Configuration (ride-hailing style)
+// Rate per tonne-km for base price calculation: $0.50 per tonne per km
+export const BASE_RATE_PER_TONNE_KM = 0.50;
+// Commission rate per tonne-km: $0.05 per tonne per km (10% of base rate)
+export const COMMISSION_RATE_PER_TONNE_KM = 0.05;
+// Legacy percentage-based commission rate (kept for backward compatibility)
 export const COMMISSION_RATE = 0.10;
+
+// Helper functions for pricing calculations
+export function calculateBasePrice(tonnes: number, distanceKm: number): number {
+  return tonnes * distanceKm * BASE_RATE_PER_TONNE_KM;
+}
+
+export function calculateCommission(tonnes: number, distanceKm: number): number {
+  return tonnes * distanceKm * COMMISSION_RATE_PER_TONNE_KM;
+}

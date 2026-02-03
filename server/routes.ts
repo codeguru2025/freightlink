@@ -19,6 +19,7 @@ import {
   DISPUTE_STATUSES
 } from "@shared/schema";
 import type { LoadStatus, BidStatus, DocumentStatus, DisputeStatus } from "@shared/schema";
+import { calculateCommission } from "@shared/schema";
 
 // Extend shared schemas for API validation
 const createProfileSchema = insertUserProfileSchema.omit({ userId: true }).extend({
@@ -29,6 +30,10 @@ const createLoadSchema = insertLoadSchema.omit({ shipperId: true, status: true }
   title: z.string().min(5, "Title must be at least 5 characters"),
   pickupDate: z.string().optional().nullable(),
   deliveryDate: z.string().optional().nullable(),
+  distanceKm: z.string().optional().nullable(),
+  basePrice: z.string().optional().nullable(),
+  shipperTip: z.string().optional().nullable(),
+  totalPrice: z.string().optional().nullable(),
 });
 
 const createBidSchema = insertBidSchema.omit({ loadId: true, transporterId: true, status: true });
@@ -346,6 +351,10 @@ export async function registerRoutes(
         budget,
         currency,
         specialInstructions,
+        distanceKm,
+        basePrice,
+        shipperTip,
+        totalPrice,
       } = validationResult.data;
 
       const load = await storage.createLoad({
@@ -354,14 +363,18 @@ export async function registerRoutes(
         description: description || null,
         cargoType: cargoType || "general",
         weight: weight,
-        weightUnit: weightUnit || "kg",
+        weightUnit: weightUnit || "tonnes",
         originCity,
         originAddress: originAddress || null,
         destinationCity,
         destinationAddress: destinationAddress || null,
+        distanceKm: distanceKm || null,
         pickupDate: pickupDate ? new Date(pickupDate) : null,
         deliveryDate: deliveryDate ? new Date(deliveryDate) : null,
-        budget: budget || null,
+        basePrice: basePrice || null,
+        shipperTip: shipperTip || "0",
+        totalPrice: totalPrice || null,
+        budget: budget || totalPrice || null, // For backward compatibility
         currency: currency || "USD",
         specialInstructions: specialInstructions || null,
         status: "posted",
@@ -420,6 +433,15 @@ export async function registerRoutes(
 
       const { amount, currency, estimatedDays, truckId, notes } = validationResult.data;
 
+      // Enforce minimum bid at base price (totalPrice includes shipper tip)
+      const minimumBid = parseFloat(load.totalPrice || load.basePrice || load.budget || "0");
+      const bidAmount = parseFloat(amount);
+      if (minimumBid > 0 && bidAmount < minimumBid) {
+        return res.status(400).json({ 
+          message: `Bid must be at least $${minimumBid.toFixed(2)} (the minimum price for this consignment)` 
+        });
+      }
+
       const bid = await storage.createBid({
         loadId,
         transporterId: userId,
@@ -461,6 +483,28 @@ export async function registerRoutes(
         return res.status(400).json({ message: "This bid cannot be accepted" });
       }
 
+      // Calculate commission using tonnage x distance formula
+      const tonnes = parseFloat(load.weight) || 0;
+      const distanceKm = parseFloat(load.distanceKm || "0") || 0;
+      const commission = calculateCommission(tonnes, distanceKm);
+
+      // Check transporter wallet balance (only if commission > 0)
+      if (commission > 0) {
+        const wallet = await storage.getWalletByUserId(bid.transporterId);
+        const walletBalance = parseFloat(wallet?.balance || "0");
+        
+        if (walletBalance < commission) {
+          return res.status(400).json({ 
+            message: `Insufficient wallet balance. Commission of $${commission.toFixed(2)} is required. Current balance: $${walletBalance.toFixed(2)}. Please top up your wallet.` 
+          });
+        }
+
+        // Deduct commission immediately from transporter's wallet
+        await storage.deductFromWallet(bid.transporterId, commission.toString(), `Commission for bid on ${load.title}`);
+        
+        // Create a job reference after we have the job ID, we'll create the transaction record
+      }
+
       // Accept this bid
       await storage.updateBidStatus(id, "accepted");
       
@@ -486,7 +530,7 @@ export async function registerRoutes(
         status: "accepted",
       });
 
-      res.json({ bid: await storage.getBid(id), job });
+      res.json({ bid: await storage.getBid(id), job, commissionDeducted: commission });
     } catch (error) {
       console.error("Error accepting bid:", error);
       res.status(500).json({ message: "Failed to accept bid" });
