@@ -570,24 +570,9 @@ export async function registerRoutes(
         return res.status(403).json({ message: "Not authorized to update this job" });
       }
 
-      // Auto-deduct 10% commission when transporter starts transit
-      if (status === "in_transit" && job.status === "accepted" && job.transporterId === userId) {
-        const agreedAmount = Number(job.agreedAmount);
-        const commission = agreedAmount * 0.10;
-        
-        // Check wallet balance
-        const wallet = await storage.getOrCreateWallet(userId);
-        if (Number(wallet.balance) < commission) {
-          return res.status(400).json({ 
-            message: `Insufficient wallet balance. You need $${commission.toFixed(2)} to cover the 10% commission. Please top up your wallet.`,
-            requiredAmount: commission,
-            currentBalance: wallet.balance
-          });
-        }
-
-        // Deduct commission
-        await storage.deductCommission(userId, id, agreedAmount);
-      }
+      // Commission deduction disabled for testing phase
+      // Will be enabled in production with Paynow integration
+      // TODO: Enable when going live with payments
 
       const updated = await storage.updateJobStatus(id, status as LoadStatus);
       res.json(updated);
@@ -1204,13 +1189,36 @@ export async function registerRoutes(
       const integrationId = process.env.PAYNOW_INTEGRATION_ID;
       const integrationKey = process.env.PAYNOW_INTEGRATION_KEY;
 
+      // Create unique reference
+      const reference = `FLZW-${userId.slice(-8)}-${Date.now()}`;
+
+      // TEST MODE: If Paynow is not configured, simulate instant top-up
       if (!integrationId || !integrationKey) {
-        return res.status(503).json({ 
-          message: "Payment system not configured. Please contact support.",
-          configRequired: true
+        // Create completed transaction immediately
+        const transaction = await storage.createWalletTransaction({
+          walletId: wallet.id,
+          userId,
+          type: "deposit",
+          amount: amount.toString(),
+          currency: "USD",
+          status: "completed",
+          reference,
+          description: `Wallet top-up via ${method} (Test Mode)`,
+        });
+
+        // Credit wallet immediately
+        await storage.updateWalletBalance(userId, amount);
+
+        return res.json({
+          success: true,
+          reference,
+          transactionId: transaction.id,
+          testMode: true,
+          message: `Test mode: $${amount.toFixed(2)} credited to your wallet instantly.`
         });
       }
 
+      // PRODUCTION MODE: Use Paynow for real payments
       // Import Paynow SDK dynamically
       const { Paynow } = await import("paynow");
       const paynow = new Paynow(integrationId, integrationKey);
@@ -1219,9 +1227,6 @@ export async function registerRoutes(
       const baseUrl = process.env.REPLIT_URL || `https://${process.env.REPLIT_DOMAINS?.split(',')[0]}`;
       paynow.resultUrl = `${baseUrl}/api/wallet/paynow-webhook`;
       paynow.returnUrl = `${baseUrl}/wallet?topup=success`;
-
-      // Create unique reference
-      const reference = `FLZW-${userId.slice(-8)}-${Date.now()}`;
 
       // Create payment
       const payment = paynow.createPayment(reference);

@@ -899,24 +899,18 @@ export class DatabaseStorage implements IStorage {
     return transaction || undefined;
   }
 
-  // Marketplace with wallet filter - only show loads where commission can be covered
+  // Marketplace for transporters - show all available loads
+  // Wallet filtering disabled for testing phase
+  // TODO: Enable wallet-based filtering when going live with payments
   async getAvailableLoadsForTransporter(userId: string): Promise<Load[]> {
-    const wallet = await this.getOrCreateWallet(userId);
-    const walletBalance = Number(wallet.balance);
-
-    // Get all posted loads
+    // Get all posted loads (no wallet filtering during testing)
     const allLoads = await db
       .select()
       .from(loads)
       .where(eq(loads.status, "posted"))
       .orderBy(desc(loads.createdAt));
 
-    // Filter loads where wallet balance can cover commission
-    return allLoads.filter(load => {
-      const budget = Number(load.budget || 0);
-      const commission = budget * COMMISSION_RATE;
-      return walletBalance >= commission;
-    });
+    return allLoads;
   }
 }
 
