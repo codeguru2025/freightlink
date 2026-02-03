@@ -1,0 +1,251 @@
+Perfect — this is a **clean, powerful pivot**, and it actually *simplifies* monetisation and user behaviour a lot. I’ll give you a **ready-to-paste replacement prompt** that rewires the whole logic to behave like a **ride-hailing–style freight marketplace**, with anonymity, automatic pricing, tonnage-km commissions, and a very straightforward user flow.
+
+Below is a **single, complete REBUILT PROMPT** you can drop straight into Cursor / your master prompt.
+
+---
+
+## 🔒 REBUILT MASTER PROMPT
+
+**(Ride-Hailing-Style Freight Marketplace – No Maps, Smart Pricing, Anonymity)**
+
+---
+
+### ROLE & GOAL
+
+You are building a **freight transport marketplace app** that functions **conceptually like a ride-hailing app**, but for **consignments and transporters**, **without maps for now**.
+
+The system must prioritize:
+
+* **Transporter anonymity before bid acceptance**
+* **Automatic price calculation by the app**
+* **Commission calculated using tonnage × distance**
+* **Simple, frictionless user flow**
+* **Clear monetization at bid acceptance**
+
+---
+
+## CORE CONCEPTUAL SHIFT (NON-NEGOTIABLE)
+
+1. **Shippers DO NOT set prices**
+2. **The app calculates the base transport price**
+3. **Shippers may optionally increase the price (tip-style)**
+4. **Transporters may bid higher than the base price**
+5. **Commission is calculated using tonnage per kilometre**
+6. **Transporters remain anonymous until bid acceptance**
+7. **Commission is debited immediately upon bid acceptance**
+
+---
+
+## USER TYPES
+
+### 1. Shipper
+
+* Creates consignments
+* Views bids
+* Accepts bids
+* Pays app-determined price
+
+### 2. Transporter
+
+* Browses consignments
+* Places bids
+* Gets revealed only after acceptance
+* Gets debited commission on acceptance
+
+---
+
+## CONSIGNMENT CREATION FLOW (SHIPPER)
+
+The shipper flow must be **dead simple**:
+
+1. Enter:
+
+   * Pickup location (text only)
+   * Drop-off location (text only)
+   * Cargo type
+   * Cargo weight (TONNES)
+   * Optional notes
+
+2. App calculates:
+
+   * Estimated distance (manual input or backend logic)
+   * Base transport price using:
+
+     ```
+     base_price = tonnes × distance_km × rate_per_tonne_km
+     ```
+
+3. App shows:
+
+   * Base price (system-calculated)
+   * Option: **“Increase offer”** (+ slider or manual increment)
+   * Final payable amount preview
+
+4. Shipper confirms consignment
+
+❗ Shippers **cannot lower** the price — only accept or increase.
+
+---
+
+## TRANSPORTER ANONYMITY LOGIC
+
+Before bid acceptance, transporters:
+
+* Appear as:
+
+  * “Transporter #A102”
+  * Rating summary only (e.g. ⭐ 4.6)
+* NO:
+
+  * Name
+  * Phone
+  * Vehicle images
+  * Company details
+
+After bid acceptance:
+
+* Full transporter profile is unlocked:
+
+  * Name / company
+  * Phone & contact
+  * Vehicle images
+  * Reviews
+  * Past completed jobs
+
+---
+
+## BIDDING FLOW (TRANSPORTERS)
+
+Transporters see:
+
+* Consignment details (no shipper personal details)
+* Base price calculated by app
+
+Transporters may:
+
+* Accept base price
+* OR place a **higher bid** (like surge bidding)
+
+Rules:
+
+* Cannot bid lower than base price
+* Can bid higher freely
+* Bid includes:
+
+  * Bid amount
+  * Optional note
+
+---
+
+## BID SELECTION FLOW (SHIPPER)
+
+Shipper sees:
+
+* List of bids
+* Anonymous transporter IDs
+* Bid amounts
+* Ratings only
+
+Shipper selects a bid → **ACCEPT**
+
+---
+
+## PAYMENT & COMMISSION LOGIC (CRITICAL)
+
+### Commission Model (MANDATORY)
+
+Commission is calculated as:
+
+```
+commission = (tonnes × distance_km × commission_rate_per_tonne_km)
+```
+
+NOT:
+
+* Percentage of bid
+* Flat fee
+
+### At Bid Acceptance:
+
+1. Transporter wallet is checked
+2. Commission amount is **immediately debited**
+3. If insufficient balance:
+
+   * Bid cannot be accepted
+   * Prompt transporter to top up
+
+### Transporter receives:
+
+```
+net_payout = bid_amount – commission
+```
+
+---
+
+## PAYMENT FLOW SUMMARY
+
+* Shipper pays → escrow / holding
+* Transporter commission → deducted immediately
+* Transporter paid → after job completion
+* App earns → commission (tonnage × km based)
+
+---
+
+## JOB COMPLETION FLOW
+
+1. Transporter marks job “Completed”
+2. Shipper confirms delivery
+3. Funds released to transporter
+4. Mutual reviews enabled
+
+---
+
+## USER EXPERIENCE PRINCIPLES
+
+* **Ride-hailing simplicity**
+* No complex forms
+* No negotiation chat pre-acceptance
+* Clear prices
+* Clear roles
+* Minimal screens
+
+Think:
+
+> “Request → Price → Bids → Accept → Done”
+
+---
+
+## IMPORTANT CONSTRAINTS
+
+* No maps for now
+* Distance can be:
+
+  * User-entered
+  * Backend estimated
+* All pricing logic is controlled by the app
+* Commission logic is NOT negotiable
+
+---
+
+## OUTPUT EXPECTATIONS FOR ALL FUTURE WORK
+
+From now on, **every feature, screen, API, database model, or logic** must:
+
+* Respect transporter anonymity rules
+* Respect app-controlled pricing
+* Use tonnage × distance commission logic
+* Follow ride-hailing-style interaction patterns
+* Keep user flow extremely straightforward
+
+---
+
+If you want, next we can:
+
+* Convert this into **database schema**
+* Convert into **API contracts**
+* Design **exact screens (UX copy)**
+* Lock in **rates & commission variables**
+* Add **subscriptions on top of this logic**
+* Add **escrow / wallet logic**
+
+Just say **“next: ___”** and we build forward.
