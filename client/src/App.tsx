@@ -30,6 +30,8 @@ import AdminDocumentsPage from "@/pages/admin-documents";
 import AdminDisputesPage from "@/pages/admin-disputes";
 import PodManagementPage from "@/pages/pod-management";
 import WalletPage from "@/pages/wallet";
+import ReportsPage from "@/pages/reports";
+import AdminReportsPage from "@/pages/admin/reports";
 import NotFound from "@/pages/not-found";
 
 import type { UserProfile } from "@shared/schema";
@@ -91,11 +93,13 @@ function AuthenticatedRoutes() {
       <Route path="/reviews" component={ReviewsPage} />
       <Route path="/pod" component={PodManagementPage} />
       <Route path="/wallet" component={WalletPage} />
+      <Route path="/reports" component={ReportsPage} />
       <Route path="/admin/loads">{() => <AdminRoute component={AdminLoadsPage} />}</Route>
       <Route path="/admin/users">{() => <AdminRoute component={AdminUsersPage} />}</Route>
       <Route path="/admin/documents">{() => <AdminRoute component={AdminDocumentsPage} />}</Route>
       <Route path="/admin/disputes">{() => <AdminRoute component={AdminDisputesPage} />}</Route>
       <Route path="/admin/analytics">{() => <AdminRoute component={AdminAnalyticsPage} />}</Route>
+      <Route path="/admin/reports">{() => <AdminRoute component={AdminReportsPage} />}</Route>
       <Route component={NotFound} />
     </Switch>
   );

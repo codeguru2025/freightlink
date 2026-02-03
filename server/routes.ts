@@ -902,6 +902,16 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/admin/transactions", isAuthenticated, requireAdmin, async (req, res) => {
+    try {
+      const allTransactions = await storage.getAllWalletTransactions();
+      res.json(allTransactions);
+    } catch (error) {
+      console.error("Error fetching all transactions:", error);
+      res.status(500).json({ message: "Failed to fetch transactions" });
+    }
+  });
+
   // Documents routes
   app.get("/api/documents", isAuthenticated, async (req, res) => {
     try {
