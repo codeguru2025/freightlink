@@ -134,10 +134,33 @@ export default function WalletPage() {
       }
     },
     onError: (error: any) => {
-      const errorMessage = error.errors ? error.errors.join(", ") : error.message;
+      let errorMessage = "Failed to initiate payment. Please try again.";
+      
+      // Parse error message properly
+      if (error.message) {
+        // Handle JSON error messages from server
+        try {
+          const parsed = JSON.parse(error.message.replace(/^\d+:\s*/, ''));
+          errorMessage = parsed.message || errorMessage;
+        } catch {
+          // If not JSON, check for common error patterns
+          if (error.message.includes("payment in progress")) {
+            errorMessage = "You have a payment in progress. Please wait for it to complete or try again later.";
+          } else if (error.message.includes("Rate limit") || error.message.includes("Too many")) {
+            errorMessage = "Too many attempts. Please wait a few minutes before trying again.";
+          } else if (error.message.includes("Daily deposit limit")) {
+            errorMessage = "You've reached your daily deposit limit. Try again tomorrow.";
+          } else if (error.errors) {
+            errorMessage = error.errors.join(", ");
+          } else {
+            errorMessage = error.message;
+          }
+        }
+      }
+      
       toast({
-        title: "Top-up Failed",
-        description: errorMessage || "Failed to initiate payment. Please try again.",
+        title: "Payment Failed",
+        description: errorMessage,
         variant: "destructive",
       });
     },
