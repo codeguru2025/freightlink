@@ -1036,7 +1036,8 @@ export class DatabaseStorage implements IStorage {
     return await db.transaction(async (tx) => {
       // CRITICAL: Lock the wallet row first to serialize all deposit requests for this user
       // This prevents race conditions where multiple concurrent requests pass checks
-      await tx.execute(sql`SELECT id FROM wallets WHERE user_id = ${userId} FOR UPDATE`);
+      // Using walletId directly since wallet is already created before this call
+      await tx.execute(sql`SELECT id FROM wallets WHERE id = ${walletId} FOR UPDATE`);
       
       // Check rate limit within transaction (atomic read after lock)
       const fifteenMinutesAgo = new Date(Date.now() - RATE_WINDOW_MS);

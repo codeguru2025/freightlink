@@ -36,10 +36,18 @@ const topupSchema = z.object({
     const num = parseFloat(val);
     return !isNaN(num) && num >= 1 && num <= 10000;
   }, "Amount must be between $1 and $10,000"),
-  phone: z.string()
-    .min(10, "Enter a valid Zimbabwe phone number")
-    .regex(/^(0|263|\+263)?(77|78|71|73)[0-9]{7}$/, "Enter a valid Zimbabwe mobile number (e.g., 0771234567)"),
-  method: z.enum(["ecocash", "onemoney"]),
+  phone: z.string().optional(),
+  method: z.enum(["ecocash", "onemoney", "innbucks", "omari", "visa_mastercard"]),
+}).refine((data) => {
+  // Phone required for mobile money methods only
+  if (["ecocash", "onemoney", "innbucks", "omari"].includes(data.method)) {
+    if (!data.phone || data.phone.length < 10) return false;
+    return /^(0|263|\+263)?(77|78|71|73|78)[0-9]{7}$/.test(data.phone);
+  }
+  return true;
+}, {
+  message: "Enter a valid Zimbabwe mobile number (e.g., 0771234567)",
+  path: ["phone"],
 });
 
 type TopupFormData = z.infer<typeof topupSchema>;
@@ -103,18 +111,24 @@ export default function WalletPage() {
     mutationFn: async (data: TopupFormData) => {
       const response = await apiRequest("POST", "/api/wallet/topup", {
         amount: parseFloat(data.amount),
-        phone: data.phone,
+        phone: data.phone || undefined,
         method: data.method,
       });
       return response;
     },
     onSuccess: (data: any) => {
       if (data.success) {
+        // If redirect URL is provided (card payment), redirect to payment page
+        if (data.redirectUrl) {
+          window.location.href = data.redirectUrl;
+          return;
+        }
+        
         setPaymentInstructions(data.instructions || data.message);
         queryClient.invalidateQueries({ queryKey: ["/api/wallet/transactions"] });
         toast({
           title: "Payment Initiated",
-          description: data.message || "Please complete the payment on your phone.",
+          description: data.message || "Please complete the payment.",
         });
         form.reset();
       }
@@ -291,28 +305,6 @@ export default function WalletPage() {
 
                         <FormField
                           control={form.control}
-                          name="phone"
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>Phone Number</FormLabel>
-                              <FormControl>
-                                <Input
-                                  type="tel"
-                                  placeholder="0771234567"
-                                  {...field}
-                                  data-testid="input-phone"
-                                />
-                              </FormControl>
-                              <FormDescription>
-                                Your EcoCash or OneMoney registered number
-                              </FormDescription>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-
-                        <FormField
-                          control={form.control}
                           name="method"
                           render={({ field }) => (
                             <FormItem>
@@ -326,12 +318,40 @@ export default function WalletPage() {
                                 <SelectContent>
                                   <SelectItem value="ecocash">EcoCash</SelectItem>
                                   <SelectItem value="onemoney">OneMoney</SelectItem>
+                                  <SelectItem value="innbucks">InnBucks</SelectItem>
+                                  <SelectItem value="omari">O'Mari</SelectItem>
+                                  <SelectItem value="visa_mastercard">Visa / Mastercard</SelectItem>
                                 </SelectContent>
                               </Select>
                               <FormMessage />
                             </FormItem>
                           )}
                         />
+
+                        {["ecocash", "onemoney", "innbucks", "omari"].includes(form.watch("method")) && (
+                          <FormField
+                            control={form.control}
+                            name="phone"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Phone Number</FormLabel>
+                                <FormControl>
+                                  <Input
+                                    type="tel"
+                                    placeholder="0771234567"
+                                    {...field}
+                                    value={field.value || ""}
+                                    data-testid="input-phone"
+                                  />
+                                </FormControl>
+                                <FormDescription>
+                                  Your mobile money registered number
+                                </FormDescription>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                        )}
 
                         <DialogFooter>
                           <Button
@@ -347,8 +367,18 @@ export default function WalletPage() {
                               </>
                             ) : (
                               <>
-                                <Smartphone className="w-4 h-4 mr-2" />
-                                Pay with {form.watch("method") === "ecocash" ? "EcoCash" : "OneMoney"}
+                                {form.watch("method") === "visa_mastercard" ? (
+                                  <DollarSign className="w-4 h-4 mr-2" />
+                                ) : (
+                                  <Smartphone className="w-4 h-4 mr-2" />
+                                )}
+                                Pay with {
+                                  form.watch("method") === "ecocash" ? "EcoCash" :
+                                  form.watch("method") === "onemoney" ? "OneMoney" :
+                                  form.watch("method") === "innbucks" ? "InnBucks" :
+                                  form.watch("method") === "omari" ? "O'Mari" :
+                                  "Visa/Mastercard"
+                                }
                               </>
                             )}
                           </Button>

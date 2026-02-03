@@ -1296,9 +1296,18 @@ export async function registerRoutes(
     amount: z.number()
       .min(1, "Minimum top-up is $1")
       .max(10000, "Maximum top-up is $10,000"),
-    phone: z.string()
-      .regex(/^(0|263|\+263)?(77|78|71|73)[0-9]{7}$/, "Enter a valid Zimbabwe mobile number (e.g., 0771234567)"),
-    method: z.enum(["ecocash", "onemoney"]).default("ecocash"),
+    phone: z.string().optional(),
+    method: z.enum(["ecocash", "onemoney", "innbucks", "omari", "visa_mastercard"]).default("ecocash"),
+  }).refine((data) => {
+    // Phone required for mobile money methods only
+    if (["ecocash", "onemoney", "innbucks", "omari"].includes(data.method)) {
+      if (!data.phone) return false;
+      return /^(0|263|\+263)?(77|78|71|73|78)[0-9]{7}$/.test(data.phone);
+    }
+    return true;
+  }, {
+    message: "Valid Zimbabwe phone number required for mobile money payments",
+    path: ["phone"],
   });
 
   // Normalize phone number to international format
@@ -1325,7 +1334,10 @@ export async function registerRoutes(
       }
 
       const { amount, method } = validationResult.data;
-      const phone = normalizeZimbabwePhone(validationResult.data.phone);
+      const isMobileMoney = ["ecocash", "onemoney", "innbucks", "omari"].includes(method);
+      const phone = isMobileMoney && validationResult.data.phone 
+        ? normalizeZimbabwePhone(validationResult.data.phone) 
+        : undefined;
       
       // Get or create wallet
       const wallet = await storage.getOrCreateWallet(userId);
@@ -1419,22 +1431,46 @@ export async function registerRoutes(
       const payment = paynow.createPayment(reference);
       payment.add("FreightLink ZW Wallet Top-up", amount);
 
-      console.log(`[PAYMENT] Initiating Paynow payment: User ${userId}, Amount $${amount}, Phone ${phone}, Method ${method}, Ref ${reference}`);
+      console.log(`[PAYMENT] Initiating Paynow payment: User ${userId}, Amount $${amount}, Phone ${phone || 'N/A'}, Method ${method}, Ref ${reference}`);
 
-      // Send mobile payment request
-      const response = await paynow.sendMobile(payment, phone, method);
+      // Send payment request based on method type
+      let response;
+      if (isMobileMoney && phone) {
+        // Mobile money payment (EcoCash, OneMoney, InnBucks, O'Mari)
+        response = await paynow.sendMobile(payment, phone, method);
+      } else {
+        // Card payment (Visa/Mastercard) - redirects to Paynow payment page
+        response = await paynow.send(payment);
+      }
 
       if (response.success) {
         console.log(`[PAYMENT] Paynow payment initiated successfully: Ref ${reference}`);
         
-        res.json({
-          success: true,
-          reference,
-          transactionId: transaction.id,
-          instructions: response.instructions,
-          pollUrl: response.pollUrl,
-          message: `Please complete the payment on your ${method === 'ecocash' ? 'EcoCash' : 'OneMoney'} phone.`
-        });
+        if (isMobileMoney) {
+          res.json({
+            success: true,
+            reference,
+            transactionId: transaction.id,
+            instructions: response.instructions,
+            pollUrl: response.pollUrl,
+            message: `Please complete the payment on your ${
+              method === 'ecocash' ? 'EcoCash' : 
+              method === 'onemoney' ? 'OneMoney' : 
+              method === 'innbucks' ? 'InnBucks' : 
+              'O\'Mari'
+            } phone.`
+          });
+        } else {
+          // Card payment - redirect to payment page
+          res.json({
+            success: true,
+            reference,
+            transactionId: transaction.id,
+            redirectUrl: response.redirectUrl,
+            pollUrl: response.pollUrl,
+            message: "Redirecting to secure payment page..."
+          });
+        }
       } else {
         // Mark transaction as failed
         await storage.updateTransactionStatus(transaction.id, "failed", undefined);
@@ -1443,7 +1479,7 @@ export async function registerRoutes(
         
         res.status(400).json({ 
           success: false, 
-          message: response.error || "Payment initiation failed. Please check your phone number and try again."
+          message: response.error || "Payment initiation failed. Please try again."
         });
       }
     } catch (error: any) {
