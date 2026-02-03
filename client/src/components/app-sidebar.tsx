@@ -14,14 +14,6 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import {
   Package,
   Home,
@@ -33,7 +25,6 @@ import {
   BarChart3,
   Settings,
   LogOut,
-  ChevronUp,
   TruckIcon,
   FileText,
   MessageSquare,
@@ -152,57 +143,44 @@ export function AppSidebar() {
       <SidebarFooter className="border-t border-sidebar-border">
         <SidebarMenu>
           <SidebarMenuItem>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <SidebarMenuButton
-                  size="lg"
-                  className="data-[state=open]:bg-sidebar-accent"
-                  data-testid="button-user-menu"
-                >
-                  <Avatar className="h-8 w-8">
-                    <AvatarImage src={user?.profileImageUrl || undefined} />
-                    <AvatarFallback className="bg-sidebar-primary text-sidebar-primary-foreground text-xs">
-                      {getInitials()}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div className="flex flex-col flex-1 text-left text-sm leading-tight">
-                    <span className="truncate font-semibold">
-                      {user?.firstName && user?.lastName 
-                        ? `${user.firstName} ${user.lastName}` 
-                        : user?.email || "User"}
-                    </span>
-                    <span className="truncate text-xs text-sidebar-foreground/70 capitalize">
-                      {profile?.role || "Setting up..."}
-                    </span>
-                  </div>
-                  <ChevronUp className="ml-auto h-4 w-4" />
-                </SidebarMenuButton>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent
-                className="w-56"
-                side="top"
-                align="start"
-                sideOffset={4}
-              >
-                <DropdownMenuItem asChild>
-                  <Link href="/settings" className="flex items-center gap-2" data-testid="nav-settings">
-                    <Settings className="h-4 w-4" />
-                    <span>Settings</span>
-                  </Link>
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem 
-                  onClick={() => logout()}
-                  className="text-destructive focus:text-destructive"
-                  data-testid="button-logout"
-                >
-                  <LogOut className="mr-2 h-4 w-4" />
-                  <span>Log out</span>
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <SidebarMenuButton asChild>
+              <Link href="/settings" data-testid="nav-settings">
+                <Settings className="h-5 w-5" />
+                <span>Settings</span>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              onClick={() => logout()}
+              className="text-destructive hover:text-destructive hover:bg-destructive/10"
+              data-testid="button-logout"
+            >
+              <LogOut className="h-5 w-5" />
+              <span>Log out</span>
+            </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
+        <div className="p-2 pt-0">
+          <div className="flex items-center gap-3 rounded-lg bg-sidebar-accent p-3">
+            <Avatar className="h-10 w-10">
+              <AvatarImage src={user?.profileImageUrl || undefined} />
+              <AvatarFallback className="bg-sidebar-primary text-sidebar-primary-foreground text-sm">
+                {getInitials()}
+              </AvatarFallback>
+            </Avatar>
+            <div className="flex flex-col flex-1 text-left text-sm leading-tight">
+              <span className="truncate font-semibold">
+                {user?.firstName && user?.lastName 
+                  ? `${user.firstName} ${user.lastName}` 
+                  : user?.email || "User"}
+              </span>
+              <span className="truncate text-xs text-sidebar-foreground/70 capitalize">
+                {profile?.role || "Setting up..."}
+              </span>
+            </div>
+          </div>
+        </div>
       </SidebarFooter>
     </Sidebar>
   );
