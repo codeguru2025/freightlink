@@ -6,6 +6,18 @@ FreightLink ZW is a digital freight marketplace platform for Zimbabwe that conne
 
 ## Recent Changes
 
+- **2026-02-03**: Wallet & Commission System for Transporters
+  - Added wallet system for transporters to manage funds for commission payments
+  - 10% commission rate deducted when jobs transition to "in_transit" status
+  - Marketplace filtering: transporters only see loads where wallet balance >= 10% of load budget
+  - Paynow integration for wallet top-up via EcoCash and OneMoney mobile money
+  - New database tables: wallets, wallet_transactions
+  - Transaction types: deposit, commission_deduction, refund, withdrawal
+  - Transaction statuses: pending, completed, failed, cancelled
+  - Wallet page (/wallet) with balance display, top-up dialog, transaction history
+  - Marketplace shows wallet balance banner with top-up CTA for empty wallets
+  - Sidebar navigation "Wallet" for transporter role
+
 - **2026-02-03**: Proof of Delivery (POD) & Payment System
   - Added comprehensive POD workflow for triggering payments after delivery
   - New document types: delivery_note, shipment_note, waybill, signed_pod
@@ -63,6 +75,8 @@ The application enables:
 - Messaging between shippers and transporters
 - Ratings and reviews for completed jobs
 - Dispute handling with admin resolution
+- Wallet management with mobile money top-up (EcoCash/OneMoney via Paynow)
+- 10% commission system for transporters (auto-deducted when starting transit)
 
 ## User Preferences
 
