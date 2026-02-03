@@ -104,6 +104,7 @@ export interface IStorage {
   createDocument(doc: InsertDocument): Promise<Document>;
   updateDocumentStatus(id: string, status: DocumentStatus, verifiedBy?: string, rejectionReason?: string): Promise<Document | undefined>;
   getAllPendingDocuments(): Promise<(Document & { user?: UserProfile })[]>;
+  getAllDocuments(): Promise<(Document & { user?: UserProfile })[]>;
 
   // Messages
   getConversations(userId: string): Promise<{ partnerId: string; partner?: UserProfile; lastMessage?: Message; unreadCount: number }[]>;
@@ -582,6 +583,17 @@ export class DatabaseStorage implements IStorage {
 
   async getAllPendingDocuments(): Promise<(Document & { user?: UserProfile })[]> {
     const docs = await db.select().from(documents).where(eq(documents.status, 'pending')).orderBy(desc(documents.createdAt));
+    const docsWithUser = await Promise.all(
+      docs.map(async (doc) => {
+        const [user] = await db.select().from(userProfiles).where(eq(userProfiles.userId, doc.userId));
+        return { ...doc, user };
+      })
+    );
+    return docsWithUser;
+  }
+
+  async getAllDocuments(): Promise<(Document & { user?: UserProfile })[]> {
+    const docs = await db.select().from(documents).orderBy(desc(documents.createdAt));
     const docsWithUser = await Promise.all(
       docs.map(async (doc) => {
         const [user] = await db.select().from(userProfiles).where(eq(userProfiles.userId, doc.userId));

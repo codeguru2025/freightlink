@@ -37,7 +37,8 @@ import { useState } from "react";
 import * as XLSX from "xlsx";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
-import type { Load, Job, Bid, UserProfile, WalletTransaction } from "@shared/schema";
+import type { Load, Job, Bid, UserProfile, WalletTransaction, Document as DocumentType } from "@shared/schema";
+import { FileText, Eye } from "lucide-react";
 
 interface AdminStats {
   totalUsers: number;
@@ -74,6 +75,11 @@ export default function AdminReportsPage() {
 
   const { data: allTransactions } = useQuery<WalletTransaction[]>({
     queryKey: ["/api/admin/transactions"],
+    enabled: !!user && userProfile?.role === "admin",
+  });
+
+  const { data: allDocuments, isLoading: documentsLoading } = useQuery<(DocumentType & { user?: UserProfile })[]>({
+    queryKey: ["/api/admin/documents/all"],
     enabled: !!user && userProfile?.role === "admin",
   });
 
@@ -352,11 +358,12 @@ export default function AdminReportsPage() {
 
         <Tabs defaultValue="loads" className="space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <TabsList>
+            <TabsList className="flex-wrap">
               <TabsTrigger value="loads" data-testid="tab-loads">Loads</TabsTrigger>
               <TabsTrigger value="jobs" data-testid="tab-jobs">Jobs</TabsTrigger>
               <TabsTrigger value="users" data-testid="tab-users">Users</TabsTrigger>
               <TabsTrigger value="transactions" data-testid="tab-transactions">Transactions</TabsTrigger>
+              <TabsTrigger value="documents" data-testid="tab-documents">Documents</TabsTrigger>
             </TabsList>
             <div className="flex items-center gap-2">
               <Select value={exportFormat} onValueChange={(v) => setExportFormat(v as "excel" | "pdf")}>
@@ -605,6 +612,77 @@ export default function AdminReportsPage() {
                     {allTransactions.length > 10 && (
                       <p className="text-sm text-muted-foreground mt-4 text-center">
                         Showing 10 of {allTransactions.length} transactions. Export for full data.
+                      </p>
+                    )}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="documents" className="space-y-4">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between gap-2">
+                <div>
+                  <CardTitle>All Documents</CardTitle>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    POD documents, payment proofs, and verification documents
+                  </p>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {documentsLoading ? (
+                  <Skeleton className="h-48 w-full" />
+                ) : !allDocuments?.length ? (
+                  <p className="text-muted-foreground text-center py-8">No documents found</p>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>ID</TableHead>
+                          <TableHead>Type</TableHead>
+                          <TableHead>File Name</TableHead>
+                          <TableHead>User</TableHead>
+                          <TableHead>Job ID</TableHead>
+                          <TableHead>Status</TableHead>
+                          <TableHead>View</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {allDocuments.slice(0, 20).map((doc) => (
+                          <TableRow key={doc.id} data-testid={`row-document-${doc.id}`}>
+                            <TableCell className="font-mono text-xs">{doc.id.slice(0, 8)}</TableCell>
+                            <TableCell>
+                              <Badge variant={doc.documentType === "payment_proof" ? "default" : "outline"}>
+                                {doc.documentType.replace(/_/g, " ")}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="max-w-[150px] truncate">{doc.fileName}</TableCell>
+                            <TableCell>{doc.user?.companyName || doc.userId.slice(0, 8)}</TableCell>
+                            <TableCell className="font-mono text-xs">{doc.jobId?.slice(0, 8) || "-"}</TableCell>
+                            <TableCell>{getStatusBadge(doc.status)}</TableCell>
+                            <TableCell>
+                              {doc.fileUrl && (
+                                <a 
+                                  href={doc.fileUrl} 
+                                  target="_blank" 
+                                  rel="noopener noreferrer"
+                                  className="hover:underline flex items-center gap-1"
+                                  data-testid={`link-view-document-${doc.id}`}
+                                >
+                                  <Eye className="h-4 w-4" />
+                                  View
+                                </a>
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                    {allDocuments.length > 20 && (
+                      <p className="text-sm text-muted-foreground mt-4 text-center">
+                        Showing 20 of {allDocuments.length} documents.
                       </p>
                     )}
                   </div>

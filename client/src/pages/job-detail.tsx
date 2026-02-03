@@ -99,14 +99,18 @@ export default function JobDetailPage() {
   const [reviewDialogOpen, setReviewDialogOpen] = useState(false);
   const [disputeDialogOpen, setDisputeDialogOpen] = useState(false);
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
+  const [paymentProofDialogOpen, setPaymentProofDialogOpen] = useState(false);
   const [rating, setRating] = useState(5);
   const [comment, setComment] = useState("");
   const [disputeReason, setDisputeReason] = useState("");
   const [disputeDescription, setDisputeDescription] = useState("");
   const [docType, setDocType] = useState("proof_of_delivery");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [paymentProofFile, setPaymentProofFile] = useState<File | null>(null);
   const [isUploadingDoc, setIsUploadingDoc] = useState(false);
+  const [isUploadingPaymentProof, setIsUploadingPaymentProof] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const paymentProofInputRef = useRef<HTMLInputElement>(null);
 
   const { data: profile } = useQuery<UserProfile>({
     queryKey: ["/api/profile"],
@@ -291,12 +295,60 @@ export default function JobDetailPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/jobs", jobId] });
       queryClient.invalidateQueries({ queryKey: ["/api/pod-jobs"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/jobs", jobId, "documents"] });
       toast({ title: "Payment marked as complete" });
+      setPaymentProofDialogOpen(false);
+      setPaymentProofFile(null);
     },
     onError: () => {
       toast({ title: "Failed to mark as paid", variant: "destructive" });
     },
   });
+
+  const handleUploadPaymentProofAndMarkPaid = async () => {
+    if (!paymentProofFile) {
+      toast({ title: "Please select a payment proof file", variant: "destructive" });
+      return;
+    }
+
+    setIsUploadingPaymentProof(true);
+    try {
+      // Get presigned upload URL
+      const urlResponse = await apiRequest("POST", "/api/uploads/request-url", {
+        name: paymentProofFile.name,
+        size: paymentProofFile.size,
+        contentType: paymentProofFile.type,
+      });
+      const { uploadURL, objectPath } = await urlResponse.json();
+
+      // Upload file to presigned URL
+      const uploadResponse = await fetch(uploadURL, {
+        method: "PUT",
+        body: paymentProofFile,
+        headers: { "Content-Type": paymentProofFile.type },
+      });
+
+      if (!uploadResponse.ok) {
+        throw new Error("File upload failed");
+      }
+
+      // Create document record for payment proof
+      await apiRequest("POST", "/api/documents", {
+        documentType: "payment_proof",
+        fileName: paymentProofFile.name,
+        fileUrl: objectPath,
+        jobId: jobId,
+      });
+
+      // Now mark the job as paid
+      await markPaidMutation.mutateAsync();
+    } catch (error) {
+      console.error("Error uploading payment proof:", error);
+      toast({ title: "Failed to upload payment proof", variant: "destructive" });
+    } finally {
+      setIsUploadingPaymentProof(false);
+    }
+  };
 
   const startConversation = () => {
     const partnerId = profile?.role === "shipper" ? job?.transporterId : job?.shipperId;
@@ -468,10 +520,74 @@ export default function JobDetailPage() {
                       </Button>
                     )}
                     {canMarkPaid && (
-                      <Button onClick={() => markPaidMutation.mutate()} disabled={markPaidMutation.isPending} variant="default" data-testid="button-mark-paid">
-                        <CreditCard className="w-4 h-4 mr-2" />
-                        Mark as Paid
-                      </Button>
+                      <Dialog open={paymentProofDialogOpen} onOpenChange={setPaymentProofDialogOpen}>
+                        <DialogTrigger asChild>
+                          <Button variant="default" data-testid="button-mark-paid">
+                            <CreditCard className="w-4 h-4 mr-2" />
+                            Mark as Paid
+                          </Button>
+                        </DialogTrigger>
+                        <DialogContent>
+                          <DialogHeader>
+                            <DialogTitle>Upload Payment Proof</DialogTitle>
+                            <DialogDescription>
+                              Upload proof of payment (bank transfer receipt, mobile money confirmation, etc.) before marking as paid
+                            </DialogDescription>
+                          </DialogHeader>
+                          <div className="space-y-4">
+                            <div 
+                              className="border-2 border-dashed rounded-lg p-6 text-center cursor-pointer hover:bg-muted/50 transition-colors"
+                              onClick={() => paymentProofInputRef.current?.click()}
+                              data-testid="container-payment-proof-upload"
+                            >
+                              <input
+                                ref={paymentProofInputRef}
+                                type="file"
+                                className="hidden"
+                                onChange={(e) => {
+                                  const file = e.target.files?.[0];
+                                  if (file) setPaymentProofFile(file);
+                                }}
+                                accept=".pdf,.jpg,.jpeg,.png"
+                                data-testid="input-payment-proof-file"
+                              />
+                              <Upload className="w-8 h-8 mx-auto mb-2 text-muted-foreground" />
+                              {paymentProofFile ? (
+                                <div>
+                                  <p className="font-medium text-sm">{paymentProofFile.name}</p>
+                                  <p className="text-xs text-muted-foreground">
+                                    {(paymentProofFile.size / 1024 / 1024).toFixed(2)} MB
+                                  </p>
+                                </div>
+                              ) : (
+                                <div>
+                                  <p className="font-medium">Click to select payment proof</p>
+                                  <p className="text-sm text-muted-foreground">PDF, JPG, or PNG</p>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                          <DialogFooter>
+                            <Button 
+                              variant="outline" 
+                              onClick={() => {
+                                setPaymentProofDialogOpen(false);
+                                setPaymentProofFile(null);
+                              }}
+                              data-testid="button-cancel-payment-proof"
+                            >
+                              Cancel
+                            </Button>
+                            <Button 
+                              onClick={handleUploadPaymentProofAndMarkPaid}
+                              disabled={!paymentProofFile || isUploadingPaymentProof}
+                              data-testid="button-submit-payment-proof"
+                            >
+                              {isUploadingPaymentProof ? "Uploading..." : "Upload & Mark as Paid"}
+                            </Button>
+                          </DialogFooter>
+                        </DialogContent>
+                      </Dialog>
                     )}
                     <Link href="/pod">
                       <Button variant="outline" data-testid="button-view-pod-page">

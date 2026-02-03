@@ -27,10 +27,10 @@ export default function MessagesPage() {
   const [messageText, setMessageText] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Parse partner from wouter location for routing state sync
+  // Parse partner from browser location for routing state sync
   const getPartnerFromLocation = () => {
-    const url = new URL(location, "http://localhost");
-    return url.searchParams.get("partner");
+    const params = new URLSearchParams(window.location.search);
+    return params.get("partner");
   };
   
   const [selectedPartner, setSelectedPartner] = useState<string | null>(() => getPartnerFromLocation());
@@ -42,6 +42,14 @@ export default function MessagesPage() {
       setSelectedPartner(partnerFromUrl);
     }
   }, [location]);
+
+  // Also check on initial mount
+  useEffect(() => {
+    const partnerFromUrl = getPartnerFromLocation();
+    if (partnerFromUrl) {
+      setSelectedPartner(partnerFromUrl);
+    }
+  }, []);
 
   const { data: conversations, isLoading: loadingConversations } = useQuery<Conversation[]>({
     queryKey: ["/api/messages/conversations"],
@@ -100,7 +108,7 @@ export default function MessagesPage() {
 
   return (
     <DashboardLayout title="Messages" breadcrumbs={[{ label: "Messages" }]}>
-      <div className="h-[calc(100vh-12rem)] flex flex-col md:flex-row border rounded-lg overflow-hidden">
+      <div className="h-[calc(100vh-8rem)] min-h-[400px] flex flex-col md:flex-row border rounded-lg overflow-hidden">
         <div className={`${selectedPartner ? "hidden md:flex" : "flex"} flex-col w-full md:w-80 border-r`}>
           <div className="p-4 border-b">
             <span className="text-lg font-semibold">Conversations</span>

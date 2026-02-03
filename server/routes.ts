@@ -35,10 +35,10 @@ const createBidSchema = insertBidSchema.omit({ loadId: true, transporterId: true
 
 const createTruckSchema = insertTruckSchema.omit({ ownerId: true });
 
-// Document validation - includes all POD document types
+// Document validation - includes all POD document types and payment proof
 // fileUrl can be a full URL or a relative path like /objects/...
 const createDocumentSchema = insertDocumentSchema.omit({ userId: true, status: true, verifiedBy: true, verifiedAt: true, rejectionReason: true }).extend({
-  documentType: z.enum(["id_document", "drivers_license", "vehicle_registration", "insurance", "proof_of_delivery", "invoice", "delivery_note", "shipment_note", "waybill", "signed_pod", "other"]),
+  documentType: z.enum(["id_document", "drivers_license", "vehicle_registration", "insurance", "proof_of_delivery", "invoice", "delivery_note", "shipment_note", "waybill", "signed_pod", "payment_proof", "other"]),
   fileName: z.string().min(1, "File name is required"),
   fileUrl: z.string().min(1, "File path is required"),
 });
@@ -768,6 +768,13 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Payment must be requested before marking as paid" });
       }
 
+      // Verify payment proof document exists for this job
+      const jobDocs = await storage.getDocumentsByJob(id);
+      const hasPaymentProof = jobDocs.some(d => d.documentType === "payment_proof" && d.userId === userId);
+      if (!hasPaymentProof) {
+        return res.status(400).json({ message: "Payment proof must be uploaded before marking as paid" });
+      }
+
       const updated = await storage.markAsPaid(id);
       res.json(updated);
     } catch (error) {
@@ -997,6 +1004,16 @@ export async function registerRoutes(
       res.json(docs);
     } catch (error) {
       console.error("Error fetching pending documents:", error);
+      res.status(500).json({ message: "Failed to fetch documents" });
+    }
+  });
+
+  app.get("/api/admin/documents/all", isAuthenticated, requireAdmin, async (req, res) => {
+    try {
+      const docs = await storage.getAllDocuments();
+      res.json(docs);
+    } catch (error) {
+      console.error("Error fetching all documents:", error);
       res.status(500).json({ message: "Failed to fetch documents" });
     }
   });
