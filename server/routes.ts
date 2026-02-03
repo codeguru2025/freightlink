@@ -1447,6 +1447,9 @@ export async function registerRoutes(
         response = await paynow.send(payment);
       }
 
+      // Log full Paynow response for debugging
+      console.log(`[PAYMENT] Paynow response:`, JSON.stringify(response, null, 2));
+      
       if (response.success) {
         console.log(`[PAYMENT] Paynow payment initiated successfully: Ref ${reference}`);
         
