@@ -6,6 +6,16 @@ FreightLink ZW is a digital freight marketplace platform for Zimbabwe that conne
 
 ## Recent Changes
 
+- **2026-02-03**: Production-Ready Payment Security
+  - Wallet top-up uses atomic transactions with SELECT...FOR UPDATE row locking
+  - All security checks (rate limit, pending check, daily limit) happen within locked transaction
+  - Rate limiting: 5 deposit attempts per 15 minutes per user
+  - Pending payment blocking: Only one pending deposit allowed at a time
+  - Daily limit: $50,000 maximum deposits per day per user
+  - Webhook verification: MANDATORY in production with SHA512 hash + timing-safe comparison
+  - Raw body capture for accurate Paynow signature verification
+  - Phone validation: Zimbabwe format with EcoCash/OneMoney prefixes
+
 - **2026-02-03**: Production-Ready Atomic Transactions
   - Bid placement now uses DB transaction: reserves commission + creates bid atomically
   - Bid acceptance uses DB transaction: all steps (deduct, accept, reject others, create job) in one atomic operation
