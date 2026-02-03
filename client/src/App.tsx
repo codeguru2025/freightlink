@@ -1,5 +1,5 @@
 import { Switch, Route } from "wouter";
-import { queryClient } from "./lib/queryClient";
+import { queryClient, getQueryFn } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -51,8 +51,9 @@ function AdminRoute({ component: Component }: { component: React.ComponentType }
 function AuthenticatedRoutes() {
   const { user, isLoading: authLoading } = useAuth();
 
-  const { data: profile, isLoading: profileLoading } = useQuery<UserProfile>({
+  const { data: profile, isLoading: profileLoading } = useQuery<UserProfile | null>({
     queryKey: ["/api/profile"],
+    queryFn: getQueryFn({ on401: "returnNull", on404: "returnNull" }),
     enabled: !!user,
   });
 
