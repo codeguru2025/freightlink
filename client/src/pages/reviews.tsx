@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
+import { DashboardLayout } from "@/components/dashboard-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -50,18 +51,18 @@ export default function ReviewsPage() {
 
   if (loadingReviews || loadingRating) {
     return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <div className="animate-pulse text-muted-foreground">Loading reviews...</div>
-      </div>
+      <DashboardLayout title="My Reviews" breadcrumbs={[{ label: "Reviews" }]}>
+        <div className="flex items-center justify-center min-h-[400px]">
+          <div className="animate-pulse text-muted-foreground">Loading reviews...</div>
+        </div>
+      </DashboardLayout>
     );
   }
 
   return (
-    <div className="p-4 md:p-6 space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold" data-testid="text-page-title">My Reviews</h1>
+    <DashboardLayout title="My Reviews" breadcrumbs={[{ label: "Reviews" }]}>
+      <div className="space-y-6">
         <p className="text-muted-foreground">See what others are saying about you</p>
-      </div>
 
       <Card>
         <CardContent className="p-6">
@@ -124,6 +125,7 @@ export default function ReviewsPage() {
           ))}
         </div>
       )}
-    </div>
+      </div>
+    </DashboardLayout>
   );
 }

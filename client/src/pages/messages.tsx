@@ -1,5 +1,6 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
+import { DashboardLayout } from "@/components/dashboard-layout";
 import { useLocation } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -89,19 +90,22 @@ export default function MessagesPage() {
 
   if (loadingConversations) {
     return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <div className="animate-pulse text-muted-foreground">Loading messages...</div>
-      </div>
+      <DashboardLayout title="Messages" breadcrumbs={[{ label: "Messages" }]}>
+        <div className="flex items-center justify-center min-h-[400px]">
+          <div className="animate-pulse text-muted-foreground">Loading messages...</div>
+        </div>
+      </DashboardLayout>
     );
   }
 
   return (
-    <div className="h-[calc(100vh-4rem)] flex flex-col md:flex-row">
-      <div className={`${selectedPartner ? "hidden md:flex" : "flex"} flex-col w-full md:w-80 border-r`}>
-        <div className="p-4 border-b">
-          <h1 className="text-xl font-bold" data-testid="text-page-title">Messages</h1>
-        </div>
-        <div className="flex-1 overflow-y-auto">
+    <DashboardLayout title="Messages" breadcrumbs={[{ label: "Messages" }]}>
+      <div className="h-[calc(100vh-12rem)] flex flex-col md:flex-row border rounded-lg overflow-hidden">
+        <div className={`${selectedPartner ? "hidden md:flex" : "flex"} flex-col w-full md:w-80 border-r`}>
+          <div className="p-4 border-b">
+            <span className="text-lg font-semibold">Conversations</span>
+          </div>
+          <div className="flex-1 overflow-y-auto">
           {!conversations?.length ? (
             <div className="flex flex-col items-center justify-center p-8 text-center">
               <MessageSquare className="w-12 h-12 text-muted-foreground mb-4" />
@@ -214,7 +218,8 @@ export default function MessagesPage() {
             </div>
           </div>
         )}
+        </div>
       </div>
-    </div>
+    </DashboardLayout>
   );
 }

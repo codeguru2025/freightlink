@@ -1,5 +1,6 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
+import { DashboardLayout } from "@/components/dashboard-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -65,18 +66,18 @@ export default function AdminDocumentsPage() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <div className="animate-pulse text-muted-foreground">Loading documents...</div>
-      </div>
+      <DashboardLayout title="Document Verification" breadcrumbs={[{ label: "Admin" }, { label: "Documents" }]}>
+        <div className="flex items-center justify-center min-h-[400px]">
+          <div className="animate-pulse text-muted-foreground">Loading documents...</div>
+        </div>
+      </DashboardLayout>
     );
   }
 
   return (
-    <div className="p-4 md:p-6 space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold" data-testid="text-page-title">Document Verification</h1>
+    <DashboardLayout title="Document Verification" breadcrumbs={[{ label: "Admin" }, { label: "Documents" }]}>
+      <div className="space-y-6">
         <p className="text-muted-foreground">Review and verify user documents</p>
-      </div>
 
       {!documents?.length ? (
         <Card>
@@ -159,6 +160,7 @@ export default function AdminDocumentsPage() {
           ))}
         </div>
       )}
-    </div>
+      </div>
+    </DashboardLayout>
   );
 }

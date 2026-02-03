@@ -1,5 +1,6 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
+import { DashboardLayout } from "@/components/dashboard-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -69,18 +70,18 @@ export default function AdminDisputesPage() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <div className="animate-pulse text-muted-foreground">Loading disputes...</div>
-      </div>
+      <DashboardLayout title="Dispute Management" breadcrumbs={[{ label: "Admin" }, { label: "Disputes" }]}>
+        <div className="flex items-center justify-center min-h-[400px]">
+          <div className="animate-pulse text-muted-foreground">Loading disputes...</div>
+        </div>
+      </DashboardLayout>
     );
   }
 
   return (
-    <div className="p-4 md:p-6 space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold" data-testid="text-page-title">Dispute Management</h1>
+    <DashboardLayout title="Dispute Management" breadcrumbs={[{ label: "Admin" }, { label: "Disputes" }]}>
+      <div className="space-y-6">
         <p className="text-muted-foreground">Handle and resolve user disputes</p>
-      </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <Card>
@@ -193,7 +194,8 @@ export default function AdminDisputesPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+      </div>
+    </DashboardLayout>
   );
 }
 
