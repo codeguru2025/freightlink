@@ -6,6 +6,19 @@ FreightLink ZW is a digital freight marketplace platform for Zimbabwe that conne
 
 ## Recent Changes
 
+- **2026-02-03**: Ride-Hailing Style Pricing Model
+  - App calculates transport prices automatically: weight (tonnes) × distance (km) × $0.50/tonne-km
+  - Shippers enter distance in km (with lookup table for Zimbabwe city pairs)
+  - Shippers can add optional tip on top of base price
+  - Transporters must bid at or above the total price (base + tip)
+  - Transporter identity hidden until bid acceptance (shows "Transporter #XXXX" + rating)
+  - Commission changed to tonnage-km based: tonnes × km × $0.05/tonne-km
+  - Commission deducted from wallet immediately when bid is accepted
+  - New load fields: distanceKm, basePrice, shipperTip, totalPrice
+  - Configurable rates in shared/schema.ts: BASE_RATE_PER_TONNE_KM, COMMISSION_RATE_PER_TONNE_KM
+  - **Testing Mode**: Commission deduction at bid acceptance is active
+  - **Production TODO**: No changes required, system is production-ready
+
 - **2026-02-03**: Reports & Summaries Feature
   - Added user reports page (/reports) for shippers and transporters
   - Shipper reports: total loads posted, active jobs, completed jobs, loads history
@@ -26,9 +39,9 @@ FreightLink ZW is a digital freight marketplace platform for Zimbabwe that conne
   - Wallet page (/wallet) with balance display, top-up dialog, transaction history
   - Marketplace shows wallet balance banner for transporters
   - Sidebar navigation "Wallet" for transporter role
-  - **Testing Mode**: Commission deduction and marketplace filtering disabled
+  - Commission now tonnage-km based (see Ride-Hailing Style Pricing above)
   - **Testing Mode**: Wallet top-up works instantly without Paynow credentials
-  - **Production TODO**: Enable 10% commission on transit start, enable wallet filtering, configure PAYNOW_INTEGRATION_ID and PAYNOW_INTEGRATION_KEY
+  - **Production TODO**: Configure PAYNOW_INTEGRATION_ID and PAYNOW_INTEGRATION_KEY
 
 - **2026-02-03**: Proof of Delivery (POD) & Payment System
   - Added comprehensive POD workflow for triggering payments after delivery
@@ -79,8 +92,10 @@ FreightLink ZW is a digital freight marketplace platform for Zimbabwe that conne
   - Mobile-first responsive design
 
 The application enables:
-- Shippers to post cargo loads and accept bids from transporters
-- Transporters to browse available loads, submit bids, and manage their truck fleet
+- Shippers to post cargo loads with app-calculated pricing (weight × distance × $0.50/tonne-km)
+- Shippers can add optional tips on top of base price
+- Transporters to browse available loads, submit bids (at or above app price), and manage their truck fleet
+- Transporter identity hidden until bid accepted (anonymous bidding with ratings visible)
 - Job tracking and status management throughout the delivery lifecycle
 - Proof of Delivery (POD) workflow for payment triggering
 - Document upload and verification for user/vehicle credentials
@@ -88,7 +103,7 @@ The application enables:
 - Ratings and reviews for completed jobs
 - Dispute handling with admin resolution
 - Wallet management with mobile money top-up (EcoCash/OneMoney via Paynow)
-- 10% commission system for transporters (auto-deducted when starting transit)
+- Tonnage-km based commission ($0.05/tonne-km, deducted at bid acceptance from wallet)
 - Reports and summaries for all users (admins get Excel/PDF export)
 
 ## User Preferences

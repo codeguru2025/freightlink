@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { useRoute, useLocation, Link } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm, useWatch } from "react-hook-form";
@@ -67,6 +68,16 @@ export default function PlaceBidPage() {
       notes: "",
     },
   });
+
+  // Prefill form with minimum bid when load data arrives
+  useEffect(() => {
+    if (load && minimumBid > 0) {
+      const currentAmount = form.getValues("amount");
+      if (!currentAmount || currentAmount === "") {
+        form.setValue("amount", minimumBid.toFixed(2));
+      }
+    }
+  }, [load, minimumBid, form]);
 
   // Watch the bid amount to show potential earnings
   const bidAmount = useWatch({ control: form.control, name: "amount" });
