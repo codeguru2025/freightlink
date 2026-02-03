@@ -75,8 +75,11 @@ export function AppSidebar() {
     { title: "Dashboard", url: "/dashboard", icon: Home },
     { title: "All Loads", url: "/admin/loads", icon: Package },
     { title: "All Users", url: "/admin/users", icon: Users },
+    { title: "All Jobs", url: "/jobs", icon: Briefcase },
+    { title: "Marketplace", url: "/marketplace", icon: List },
     { title: "Documents", url: "/admin/documents", icon: FileText },
     { title: "Disputes", url: "/admin/disputes", icon: AlertTriangle },
+    { title: "Messages", url: "/messages", icon: MessageSquare },
     { title: "Analytics", url: "/admin/analytics", icon: BarChart3 },
     { title: "Reports", url: "/admin/reports", icon: FileText },
   ];
