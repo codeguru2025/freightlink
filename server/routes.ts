@@ -214,8 +214,29 @@ export async function registerRoutes(
 
   app.get("/api/marketplace", isAuthenticated, async (req, res) => {
     try {
+      const userId = getUserId(req);
+      if (!userId) return res.status(401).json({ message: "Unauthorized" });
+
+      const profile = await storage.getProfile(userId);
+      
+      // For transporters, filter loads based on wallet balance (commission coverage)
+      if (profile?.role === "transporter") {
+        const loads = await storage.getAvailableLoadsForTransporter(userId);
+        const wallet = await storage.getOrCreateWallet(userId);
+        return res.json({
+          loads,
+          walletBalance: wallet.balance,
+          currency: wallet.currency,
+          commissionRate: 0.10,
+          message: loads.length === 0 
+            ? "No loads available within your wallet balance. Top up your wallet to see more loads."
+            : undefined
+        });
+      }
+
+      // For shippers and admin, show all available loads
       const loads = await storage.getAvailableLoads();
-      res.json(loads);
+      res.json({ loads });
     } catch (error) {
       console.error("Error fetching marketplace loads:", error);
       res.status(500).json({ message: "Failed to fetch marketplace loads" });
@@ -547,6 +568,25 @@ export async function registerRoutes(
       // Check authorization
       if (job.shipperId !== userId && job.transporterId !== userId) {
         return res.status(403).json({ message: "Not authorized to update this job" });
+      }
+
+      // Auto-deduct 10% commission when transporter starts transit
+      if (status === "in_transit" && job.status === "accepted" && job.transporterId === userId) {
+        const agreedAmount = Number(job.agreedAmount);
+        const commission = agreedAmount * 0.10;
+        
+        // Check wallet balance
+        const wallet = await storage.getOrCreateWallet(userId);
+        if (Number(wallet.balance) < commission) {
+          return res.status(400).json({ 
+            message: `Insufficient wallet balance. You need $${commission.toFixed(2)} to cover the 10% commission. Please top up your wallet.`,
+            requiredAmount: commission,
+            currentBalance: wallet.balance
+          });
+        }
+
+        // Deduct commission
+        await storage.deductCommission(userId, id, agreedAmount);
       }
 
       const updated = await storage.updateJobStatus(id, status as LoadStatus);
@@ -1106,6 +1146,186 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error updating dispute:", error);
       res.status(500).json({ message: "Failed to update dispute" });
+    }
+  });
+
+  // ============ WALLET ROUTES ============
+
+  // Get wallet balance and info
+  app.get("/api/wallet", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) return res.status(401).json({ message: "Unauthorized" });
+
+      const wallet = await storage.getOrCreateWallet(userId);
+      res.json(wallet);
+    } catch (error) {
+      console.error("Error fetching wallet:", error);
+      res.status(500).json({ message: "Failed to fetch wallet" });
+    }
+  });
+
+  // Get wallet transactions
+  app.get("/api/wallet/transactions", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) return res.status(401).json({ message: "Unauthorized" });
+
+      const transactions = await storage.getWalletTransactions(userId);
+      res.json(transactions);
+    } catch (error) {
+      console.error("Error fetching transactions:", error);
+      res.status(500).json({ message: "Failed to fetch transactions" });
+    }
+  });
+
+  // Top-up wallet validation schema
+  const topupSchema = z.object({
+    amount: z.number().min(1, "Amount must be at least 1 USD"),
+    phone: z.string().min(10, "Valid phone number required"),
+    method: z.enum(["ecocash", "onemoney"]).default("ecocash"),
+  });
+
+  // Initiate wallet top-up via Paynow/EcoCash
+  app.post("/api/wallet/topup", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) return res.status(401).json({ message: "Unauthorized" });
+
+      const validationResult = topupSchema.safeParse(req.body);
+      if (!validationResult.success) {
+        return res.status(400).json({ message: "Invalid request body", errors: validationResult.error.errors });
+      }
+
+      const { amount, phone, method } = validationResult.data;
+      const wallet = await storage.getOrCreateWallet(userId);
+
+      // Check if Paynow credentials are configured
+      const integrationId = process.env.PAYNOW_INTEGRATION_ID;
+      const integrationKey = process.env.PAYNOW_INTEGRATION_KEY;
+
+      if (!integrationId || !integrationKey) {
+        return res.status(503).json({ 
+          message: "Payment system not configured. Please contact support.",
+          configRequired: true
+        });
+      }
+
+      // Import Paynow SDK dynamically
+      const { Paynow } = await import("paynow");
+      const paynow = new Paynow(integrationId, integrationKey);
+      
+      // Set URLs for callbacks
+      const baseUrl = process.env.REPLIT_URL || `https://${process.env.REPLIT_DOMAINS?.split(',')[0]}`;
+      paynow.resultUrl = `${baseUrl}/api/wallet/paynow-webhook`;
+      paynow.returnUrl = `${baseUrl}/wallet?topup=success`;
+
+      // Create unique reference
+      const reference = `FLZW-${userId.slice(-8)}-${Date.now()}`;
+
+      // Create payment
+      const payment = paynow.createPayment(reference);
+      payment.add("Wallet Top-up", amount);
+
+      // Create pending transaction record
+      const transaction = await storage.createWalletTransaction({
+        walletId: wallet.id,
+        userId,
+        type: "deposit",
+        amount: amount.toString(),
+        currency: "USD",
+        status: "pending",
+        reference,
+        description: `Wallet top-up via ${method}`,
+      });
+
+      // Send mobile payment request
+      const response = await paynow.sendMobile(payment, phone, method);
+
+      if (response.success) {
+        // Update transaction with poll URL
+        await storage.updateTransactionStatus(transaction.id, "pending", undefined);
+        
+        res.json({
+          success: true,
+          reference,
+          transactionId: transaction.id,
+          instructions: response.instructions,
+          pollUrl: response.pollUrl,
+          message: `Please complete the payment on your ${method === 'ecocash' ? 'EcoCash' : 'OneMoney'} phone.`
+        });
+      } else {
+        // Mark transaction as failed
+        await storage.updateTransactionStatus(transaction.id, "failed", undefined);
+        res.status(400).json({ 
+          success: false, 
+          message: response.error || "Payment initiation failed" 
+        });
+      }
+    } catch (error) {
+      console.error("Error initiating top-up:", error);
+      res.status(500).json({ message: "Failed to initiate payment" });
+    }
+  });
+
+  // Paynow webhook for payment confirmation
+  app.post("/api/wallet/paynow-webhook", async (req, res) => {
+    try {
+      const { reference, status, amount, paynowreference } = req.body;
+
+      console.log("Paynow webhook received:", { reference, status, amount, paynowreference });
+
+      if (!reference) {
+        return res.status(400).send("Missing reference");
+      }
+
+      const transaction = await storage.getTransactionByReference(reference);
+      if (!transaction) {
+        console.error("Transaction not found for reference:", reference);
+        return res.status(404).send("Transaction not found");
+      }
+
+      if (status === "Paid" || status === "paid") {
+        // Update transaction status
+        await storage.updateTransactionStatus(transaction.id, "completed", paynowreference);
+        
+        // Credit wallet
+        await storage.updateWalletBalance(transaction.userId, Number(transaction.amount));
+        
+        console.log(`Wallet credited: User ${transaction.userId}, Amount ${transaction.amount}`);
+      } else if (status === "Cancelled" || status === "Failed") {
+        await storage.updateTransactionStatus(transaction.id, "failed", paynowreference);
+      }
+
+      res.status(200).send("OK");
+    } catch (error) {
+      console.error("Error processing Paynow webhook:", error);
+      res.status(500).send("Error");
+    }
+  });
+
+  // Check payment status (poll transaction)
+  app.get("/api/wallet/transactions/:id/status", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) return res.status(401).json({ message: "Unauthorized" });
+
+      const transactions = await storage.getWalletTransactions(userId);
+      const transaction = transactions.find(t => t.id === req.params.id);
+
+      if (!transaction) {
+        return res.status(404).json({ message: "Transaction not found" });
+      }
+
+      res.json({
+        id: transaction.id,
+        status: transaction.status,
+        amount: transaction.amount,
+        completedAt: transaction.completedAt
+      });
+    } catch (error) {
+      console.error("Error checking transaction status:", error);
+      res.status(500).json({ message: "Failed to check status" });
     }
   });
 
