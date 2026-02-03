@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { LoadStatusBadge } from "@/components/status-badge";
 import { CargoIcon, getCargoLabel } from "@/components/cargo-icon";
-import { MapPin, ArrowRight, Calendar, Package, Scale, DollarSign, Clock } from "lucide-react";
+import { MapPin, ArrowRight, Calendar, Package, Scale, DollarSign, Clock, Route } from "lucide-react";
 import { format } from "date-fns";
 import type { Load, CargoType, LoadStatus } from "@shared/schema";
 import { Link } from "wouter";
@@ -53,14 +53,25 @@ export function LoadCard({ load, onBid, showBidButton, showViewButton = true, bi
         <div className="grid grid-cols-2 gap-3 text-sm">
           <div className="flex items-center gap-2">
             <Scale className="h-4 w-4 text-muted-foreground" />
-            <span>{load.weight} {load.weightUnit}</span>
+            <span>{load.weight} {load.weightUnit || "tonnes"}</span>
           </div>
-          {load.budget && (
+          {load.distanceKm && (
             <div className="flex items-center gap-2">
-              <DollarSign className="h-4 w-4 text-muted-foreground" />
-              <span className="font-medium">
-                {load.currency} {Number(load.budget).toLocaleString()}
+              <Route className="h-4 w-4 text-muted-foreground" />
+              <span>{Number(load.distanceKm).toLocaleString()} km</span>
+            </div>
+          )}
+          {(load.totalPrice || load.basePrice || load.budget) && (
+            <div className="flex items-center gap-2 col-span-2">
+              <DollarSign className="h-4 w-4 text-primary" />
+              <span className="font-semibold text-primary">
+                {load.currency} {Number(load.totalPrice || load.basePrice || load.budget).toLocaleString()}
               </span>
+              {load.shipperTip && Number(load.shipperTip) > 0 && (
+                <Badge variant="secondary" className="text-xs">
+                  +${Number(load.shipperTip).toFixed(0)} tip
+                </Badge>
+              )}
             </div>
           )}
           {load.pickupDate && (

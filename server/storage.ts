@@ -213,7 +213,7 @@ export class DatabaseStorage implements IStorage {
     return load || undefined;
   }
 
-  async getLoadWithBids(id: string): Promise<(Load & { bids?: (Bid & { transporter?: UserProfile })[]; shipper?: UserProfile }) | undefined> {
+  async getLoadWithBids(id: string): Promise<(Load & { bids?: (Bid & { transporter?: UserProfile; averageRating?: number; totalReviews?: number })[]; shipper?: UserProfile }) | undefined> {
     const [load] = await db.select().from(loads).where(eq(loads.id, id));
     if (!load) return undefined;
 
@@ -222,7 +222,20 @@ export class DatabaseStorage implements IStorage {
     const bidsWithTransporter = await Promise.all(
       loadBids.map(async (bid) => {
         const [transporter] = await db.select().from(userProfiles).where(eq(userProfiles.userId, bid.transporterId));
-        return { ...bid, transporter: transporter || undefined };
+        
+        // Get average rating for transporter
+        const transporterReviews = await db.select().from(reviews).where(eq(reviews.revieweeId, bid.transporterId));
+        const totalReviews = transporterReviews.length;
+        const averageRating = totalReviews > 0 
+          ? transporterReviews.reduce((sum, r) => sum + r.rating, 0) / totalReviews 
+          : 0;
+        
+        return { 
+          ...bid, 
+          transporter: transporter || undefined,
+          averageRating,
+          totalReviews 
+        };
       })
     );
 

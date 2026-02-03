@@ -21,7 +21,9 @@ import {
   User,
   FileText,
   ArrowLeft,
-  Gavel
+  Gavel,
+  Route,
+  Calculator
 } from "lucide-react";
 import { format } from "date-fns";
 import { Link } from "wouter";
@@ -187,15 +189,26 @@ export default function LoadDetailPage() {
                     <Scale className="h-5 w-5 text-muted-foreground" />
                     <div>
                       <p className="text-xs text-muted-foreground">Weight</p>
-                      <p className="font-medium">{load.weight} {load.weightUnit}</p>
+                      <p className="font-medium">{load.weight} {load.weightUnit || "tonnes"}</p>
                     </div>
                   </div>
-                  {load.budget && (
+                  {load.distanceKm && (
                     <div className="flex items-center gap-3 p-3 bg-muted/30 rounded-lg">
-                      <DollarSign className="h-5 w-5 text-muted-foreground" />
+                      <Route className="h-5 w-5 text-muted-foreground" />
                       <div>
-                        <p className="text-xs text-muted-foreground">Budget</p>
-                        <p className="font-medium">{load.currency} {Number(load.budget).toLocaleString()}</p>
+                        <p className="text-xs text-muted-foreground">Distance</p>
+                        <p className="font-medium">{Number(load.distanceKm).toLocaleString()} km</p>
+                      </div>
+                    </div>
+                  )}
+                  {(load.totalPrice || load.basePrice || load.budget) && (
+                    <div className="flex items-center gap-3 p-3 bg-primary/10 rounded-lg">
+                      <DollarSign className="h-5 w-5 text-primary" />
+                      <div>
+                        <p className="text-xs text-muted-foreground">Minimum Bid</p>
+                        <p className="font-medium text-primary">
+                          {load.currency} {Number(load.totalPrice || load.basePrice || load.budget).toLocaleString()}
+                        </p>
                       </div>
                     </div>
                   )}

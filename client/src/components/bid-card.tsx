@@ -2,23 +2,53 @@ import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card"
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { BidStatusBadge } from "@/components/status-badge";
-import { DollarSign, Clock, User, MessageSquare } from "lucide-react";
+import { DollarSign, Clock, User, MessageSquare, Star, Shield } from "lucide-react";
 import { format } from "date-fns";
 import type { Bid, BidStatus } from "@shared/schema";
 
 interface BidCardProps {
-  bid: Bid & { transporter?: { companyName?: string | null; firstName?: string | null; lastName?: string | null } };
+  bid: Bid & { 
+    transporter?: { 
+      companyName?: string | null; 
+      firstName?: string | null; 
+      lastName?: string | null;
+    };
+    averageRating?: number | null;
+    totalReviews?: number | null;
+  };
   onAccept?: () => void;
   onReject?: () => void;
   showActions?: boolean;
   isOwner?: boolean;
+  showAnonymous?: boolean; // When true, hide transporter identity
 }
 
-export function BidCard({ bid, onAccept, onReject, showActions, isOwner }: BidCardProps) {
-  const transporterName = bid.transporter?.companyName 
-    || (bid.transporter?.firstName && bid.transporter?.lastName 
-      ? `${bid.transporter.firstName} ${bid.transporter.lastName}` 
-      : "Unknown Transporter");
+// Generate anonymous ID from transporter ID (consistent for same transporter)
+function generateAnonymousId(transporterId: string): string {
+  // Create a simple hash-like ID from the transporter ID
+  const hash = transporterId.slice(-4).toUpperCase().replace(/[^A-Z0-9]/g, 'X');
+  return `Transporter #${hash}`;
+}
+
+export function BidCard({ bid, onAccept, onReject, showActions, isOwner, showAnonymous = true }: BidCardProps) {
+  const isAccepted = bid.status === "accepted";
+  
+  // Show real identity only if bid is accepted or showAnonymous is false
+  const showRealIdentity = isAccepted || !showAnonymous;
+  
+  const transporterName = showRealIdentity
+    ? (bid.transporter?.companyName 
+        || (bid.transporter?.firstName && bid.transporter?.lastName 
+          ? `${bid.transporter.firstName} ${bid.transporter.lastName}` 
+          : "Transporter"))
+    : generateAnonymousId(bid.transporterId);
+
+  const displayInitial = showRealIdentity 
+    ? transporterName[0].toUpperCase()
+    : "#";
+
+  const rating = bid.averageRating || 0;
+  const reviewCount = bid.totalReviews || 0;
 
   return (
     <Card className="hover-elevate" data-testid={`card-bid-${bid.id}`}>
@@ -26,17 +56,30 @@ export function BidCard({ bid, onAccept, onReject, showActions, isOwner }: BidCa
         <div className="flex items-start justify-between gap-4">
           <div className="flex items-center gap-3">
             <Avatar className="h-10 w-10">
-              <AvatarFallback className="bg-primary/10 text-primary">
-                {transporterName[0].toUpperCase()}
+              <AvatarFallback className={showRealIdentity ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"}>
+                {showRealIdentity ? displayInitial : <Shield className="h-5 w-5" />}
               </AvatarFallback>
             </Avatar>
             <div>
-              <h3 className="font-semibold" data-testid={`text-bid-transporter-${bid.id}`}>
-                {transporterName}
-              </h3>
-              <p className="text-sm text-muted-foreground">
-                {format(new Date(bid.createdAt!), "MMM d, yyyy 'at' h:mm a")}
-              </p>
+              <div className="flex items-center gap-2">
+                <h3 className="font-semibold" data-testid={`text-bid-transporter-${bid.id}`}>
+                  {transporterName}
+                </h3>
+                {!showRealIdentity && (
+                  <span className="text-xs text-muted-foreground">(Identity hidden)</span>
+                )}
+              </div>
+              <div className="flex items-center gap-3 text-sm text-muted-foreground">
+                {rating > 0 ? (
+                  <div className="flex items-center gap-1">
+                    <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400" />
+                    <span>{rating.toFixed(1)}</span>
+                    <span className="text-xs">({reviewCount} reviews)</span>
+                  </div>
+                ) : (
+                  <span className="text-xs">No reviews yet</span>
+                )}
+              </div>
             </div>
           </div>
           <BidStatusBadge status={bid.status as BidStatus} />
@@ -63,6 +106,9 @@ export function BidCard({ bid, onAccept, onReject, showActions, isOwner }: BidCa
             <p className="text-muted-foreground">{bid.notes}</p>
           </div>
         )}
+        <p className="text-xs text-muted-foreground">
+          Bid placed {format(new Date(bid.createdAt!), "MMM d, yyyy 'at' h:mm a")}
+        </p>
       </CardContent>
       {showActions && bid.status === "pending" && !isOwner && (
         <CardFooter className="flex gap-2 pt-0">

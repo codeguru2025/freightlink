@@ -1,6 +1,6 @@
 import { useRoute, useLocation, Link } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { DashboardLayout } from "@/components/dashboard-layout";
@@ -12,10 +12,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { LoadStatusBadge } from "@/components/status-badge";
 import { CargoIcon, getCargoLabel } from "@/components/cargo-icon";
+import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { MapPin, ArrowRight, ArrowLeft, DollarSign, Clock, Gavel } from "lucide-react";
-import type { Load, Truck, CargoType, LoadStatus } from "@shared/schema";
+import { MapPin, ArrowRight, ArrowLeft, DollarSign, Clock, Gavel, Scale, Route, AlertCircle, Wallet } from "lucide-react";
+import type { Load, Truck, CargoType, LoadStatus, Wallet as WalletType } from "@shared/schema";
+import { calculateCommission } from "@shared/schema";
 
 const bidFormSchema = z.object({
   amount: z.string().min(1, "Bid amount is required"),
@@ -43,16 +45,33 @@ export default function PlaceBidPage() {
     queryKey: ["/api/trucks"],
   });
 
+  const { data: wallet } = useQuery<WalletType>({
+    queryKey: ["/api/wallet"],
+  });
+
+  // Calculate minimum bid and commission
+  const minimumBid = parseFloat(load?.totalPrice || load?.basePrice || load?.budget || "0");
+  const tonnes = parseFloat(load?.weight || "0");
+  const distanceKm = parseFloat(load?.distanceKm || "0");
+  const estimatedCommission = calculateCommission(tonnes, distanceKm);
+  const walletBalance = parseFloat(wallet?.balance || "0");
+  const hasEnoughBalance = walletBalance >= estimatedCommission;
+
   const form = useForm<BidFormValues>({
     resolver: zodResolver(bidFormSchema),
     defaultValues: {
-      amount: "",
+      amount: minimumBid > 0 ? minimumBid.toFixed(2) : "",
       currency: "USD",
       estimatedDays: "",
       truckId: "",
       notes: "",
     },
   });
+
+  // Watch the bid amount to show potential earnings
+  const bidAmount = useWatch({ control: form.control, name: "amount" });
+  const bidValue = parseFloat(bidAmount) || 0;
+  const potentialEarnings = bidValue - estimatedCommission;
 
   const placeBidMutation = useMutation({
     mutationFn: async (data: BidFormValues) => {
@@ -82,6 +101,16 @@ export default function PlaceBidPage() {
   });
 
   const onSubmit = (data: BidFormValues) => {
+    // Client-side validation for minimum bid
+    const bidValue = parseFloat(data.amount);
+    if (minimumBid > 0 && bidValue < minimumBid) {
+      toast({
+        title: "Bid too low",
+        description: `Your bid must be at least $${minimumBid.toFixed(2)}`,
+        variant: "destructive",
+      });
+      return;
+    }
     placeBidMutation.mutate(data);
   };
 
@@ -138,7 +167,7 @@ export default function PlaceBidPage() {
               <LoadStatusBadge status={load.status as LoadStatus} />
             </div>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-4">
             <div className="flex items-center gap-4 p-3 bg-muted/50 rounded-lg">
               <div className="flex items-center gap-1.5 flex-1">
                 <MapPin className="h-4 w-4 text-primary" />
@@ -150,10 +179,72 @@ export default function PlaceBidPage() {
                 <span className="font-medium">{load.destinationCity}</span>
               </div>
             </div>
-            {load.budget && (
-              <div className="mt-3 flex items-center gap-2 text-sm">
-                <DollarSign className="h-4 w-4 text-muted-foreground" />
-                <span>Budget: <strong>{load.currency} {Number(load.budget).toLocaleString()}</strong></span>
+            
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+              <div className="flex items-center gap-2 p-2 bg-muted/30 rounded">
+                <Scale className="h-4 w-4 text-muted-foreground" />
+                <span>{load.weight} tonnes</span>
+              </div>
+              {load.distanceKm && (
+                <div className="flex items-center gap-2 p-2 bg-muted/30 rounded">
+                  <Route className="h-4 w-4 text-muted-foreground" />
+                  <span>{Number(load.distanceKm).toLocaleString()} km</span>
+                </div>
+              )}
+              {minimumBid > 0 && (
+                <div className="flex items-center gap-2 p-2 bg-primary/10 rounded col-span-2">
+                  <DollarSign className="h-4 w-4 text-primary" />
+                  <span className="font-semibold text-primary">
+                    Minimum: ${minimumBid.toFixed(2)}
+                  </span>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Commission & Wallet Info */}
+        <Card className={hasEnoughBalance ? "border-muted" : "border-orange-500/30 bg-orange-500/5"}>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Wallet className="h-5 w-5" />
+              Commission & Earnings
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="flex justify-between items-center text-sm">
+              <span className="text-muted-foreground">Your Wallet Balance</span>
+              <span className={hasEnoughBalance ? "font-medium" : "font-medium text-orange-600"}>
+                ${walletBalance.toFixed(2)}
+              </span>
+            </div>
+            <div className="flex justify-between items-center text-sm">
+              <span className="text-muted-foreground">
+                Commission ({tonnes.toFixed(1)} t × {distanceKm.toFixed(0)} km × $0.05)
+              </span>
+              <span className="font-medium text-destructive">-${estimatedCommission.toFixed(2)}</span>
+            </div>
+            <div className="border-t pt-3 flex justify-between items-center">
+              <span className="font-medium">Your Earnings (if accepted)</span>
+              <span className="text-lg font-bold text-primary" data-testid="text-potential-earnings">
+                ${potentialEarnings > 0 ? potentialEarnings.toFixed(2) : "0.00"}
+              </span>
+            </div>
+            
+            {!hasEnoughBalance && (
+              <div className="flex items-start gap-2 p-3 bg-orange-500/10 rounded-lg text-sm">
+                <AlertCircle className="h-5 w-5 text-orange-600 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-medium text-orange-700">Insufficient wallet balance</p>
+                  <p className="text-muted-foreground">
+                    You need at least ${estimatedCommission.toFixed(2)} in your wallet. Commission is deducted when your bid is accepted.
+                  </p>
+                  <Link href="/wallet">
+                    <Button variant="outline" size="sm" className="mt-2" data-testid="button-topup-wallet">
+                      Top Up Wallet
+                    </Button>
+                  </Link>
+                </div>
               </div>
             )}
           </CardContent>
@@ -169,7 +260,12 @@ export default function PlaceBidPage() {
                   </div>
                   <div>
                     <CardTitle>Your Bid</CardTitle>
-                    <CardDescription>Submit a competitive bid for this load</CardDescription>
+                    <CardDescription>
+                      {minimumBid > 0 
+                        ? `Bid at or above the minimum of $${minimumBid.toFixed(2)}`
+                        : "Submit a competitive bid for this load"
+                      }
+                    </CardDescription>
                   </div>
                 </div>
               </CardHeader>
@@ -182,8 +278,18 @@ export default function PlaceBidPage() {
                       <FormItem>
                         <FormLabel>Bid Amount</FormLabel>
                         <FormControl>
-                          <Input type="number" placeholder="0.00" {...field} data-testid="input-bid-amount" />
+                          <Input 
+                            type="number" 
+                            step="0.01"
+                            min={minimumBid > 0 ? minimumBid : 0}
+                            placeholder={minimumBid > 0 ? minimumBid.toFixed(2) : "0.00"} 
+                            {...field} 
+                            data-testid="input-bid-amount" 
+                          />
                         </FormControl>
+                        {minimumBid > 0 && (
+                          <FormDescription>Minimum: ${minimumBid.toFixed(2)}</FormDescription>
+                        )}
                         <FormMessage />
                       </FormItem>
                     )}
@@ -286,10 +392,10 @@ export default function PlaceBidPage() {
               </Link>
               <Button 
                 type="submit" 
-                disabled={placeBidMutation.isPending}
+                disabled={placeBidMutation.isPending || (!hasEnoughBalance && estimatedCommission > 0)}
                 data-testid="button-submit-bid"
               >
-                {placeBidMutation.isPending ? "Submitting..." : "Submit Bid"}
+                {placeBidMutation.isPending ? "Submitting..." : `Submit Bid - $${bidValue.toFixed(2)}`}
               </Button>
             </div>
           </form>
