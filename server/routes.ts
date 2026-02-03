@@ -1323,6 +1323,10 @@ export async function registerRoutes(
     const userId = getUserId(req);
     if (!userId) return res.status(401).json({ message: "Unauthorized" });
 
+    // Get user email for Paynow
+    const user = req.user as any;
+    const userEmail = user?.email || "customer@freightlinkzw.com";
+
     try {
       // Validate request body first
       const validationResult = topupSchema.safeParse(req.body);
@@ -1427,8 +1431,8 @@ export async function registerRoutes(
       paynow.resultUrl = `${baseUrl}/api/wallet/paynow-webhook`;
       paynow.returnUrl = `${baseUrl}/wallet?topup=success`;
 
-      // Create payment
-      const payment = paynow.createPayment(reference);
+      // Create payment with user email (required by Paynow)
+      const payment = paynow.createPayment(reference, userEmail);
       payment.add("FreightLink ZW Wallet Top-up", amount);
 
       console.log(`[PAYMENT] Initiating Paynow payment: User ${userId}, Amount $${amount}, Phone ${phone || 'N/A'}, Method ${method}, Ref ${reference}`);
