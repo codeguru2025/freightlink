@@ -32,6 +32,7 @@ import PodManagementPage from "@/pages/pod-management";
 import WalletPage from "@/pages/wallet";
 import ReportsPage from "@/pages/reports";
 import AdminReportsPage from "@/pages/admin/reports";
+import SettingsPage from "@/pages/settings";
 import NotFound from "@/pages/not-found";
 
 import type { UserProfile } from "@shared/schema";
@@ -95,6 +96,7 @@ function AuthenticatedRoutes() {
       <Route path="/pod" component={PodManagementPage} />
       <Route path="/wallet" component={WalletPage} />
       <Route path="/reports" component={ReportsPage} />
+      <Route path="/settings" component={SettingsPage} />
       <Route path="/admin/loads">{() => <AdminRoute component={AdminLoadsPage} />}</Route>
       <Route path="/admin/users">{() => <AdminRoute component={AdminUsersPage} />}</Route>
       <Route path="/admin/documents">{() => <AdminRoute component={AdminDocumentsPage} />}</Route>

@@ -1,31 +1,17 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
 import { DashboardLayout } from "@/components/dashboard-layout";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { FileText, Upload, CheckCircle, XCircle, Clock, Plus } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
-import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { useState } from "react";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useState, useRef } from "react";
 import type { Document } from "@shared/schema";
-import { DOCUMENT_TYPES } from "@shared/schema";
-
-const documentUploadSchema = z.object({
-  documentType: z.enum(["id_document", "drivers_license", "vehicle_registration", "insurance", "proof_of_delivery", "invoice", "other"]),
-  fileName: z.string().min(1, "File name is required"),
-  fileUrl: z.string().url("Valid URL is required"),
-});
-
-type DocumentUploadForm = z.infer<typeof documentUploadSchema>;
 
 const documentTypeLabels: Record<string, string> = {
   id_document: "ID Document",
@@ -34,6 +20,10 @@ const documentTypeLabels: Record<string, string> = {
   insurance: "Insurance",
   proof_of_delivery: "Proof of Delivery",
   invoice: "Invoice",
+  delivery_note: "Delivery Note",
+  shipment_note: "Shipment Note",
+  waybill: "Waybill",
+  signed_pod: "Signed POD",
   other: "Other",
 };
 
@@ -47,38 +37,77 @@ export default function DocumentsPage() {
   const { user } = useAuth();
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
+  const [documentType, setDocumentType] = useState<string>("id_document");
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { data: documents, isLoading } = useQuery<Document[]>({
     queryKey: ["/api/documents"],
     enabled: !!user,
   });
 
-  const form = useForm<DocumentUploadForm>({
-    resolver: zodResolver(documentUploadSchema),
-    defaultValues: {
-      documentType: "id_document",
-      fileName: "",
-      fileUrl: "",
-    },
-  });
+  const uploadDocument = async () => {
+    if (!selectedFile || !documentType) {
+      toast({ title: "Please select a file and document type", variant: "destructive" });
+      return;
+    }
 
-  const uploadMutation = useMutation({
-    mutationFn: async (data: DocumentUploadForm) => {
-      return apiRequest("POST", "/api/documents", data);
-    },
-    onSuccess: () => {
+    setIsUploading(true);
+    try {
+      const urlResponse = await fetch("/api/uploads/request-url", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: selectedFile.name,
+          size: selectedFile.size,
+          contentType: selectedFile.type || "application/octet-stream",
+        }),
+      });
+
+      if (!urlResponse.ok) {
+        throw new Error("Failed to get upload URL");
+      }
+
+      const { uploadURL, objectPath } = await urlResponse.json();
+
+      const uploadResponse = await fetch(uploadURL, {
+        method: "PUT",
+        body: selectedFile,
+        headers: { "Content-Type": selectedFile.type || "application/octet-stream" },
+      });
+
+      if (!uploadResponse.ok) {
+        throw new Error("Failed to upload file");
+      }
+
+      await apiRequest("POST", "/api/documents", {
+        documentType,
+        fileName: selectedFile.name,
+        fileUrl: objectPath,
+      });
+
       toast({ title: "Document uploaded successfully" });
       queryClient.invalidateQueries({ queryKey: ["/api/documents"] });
       setOpen(false);
-      form.reset();
-    },
-    onError: () => {
+      setSelectedFile(null);
+      setDocumentType("id_document");
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+    } catch (error) {
+      console.error("Upload error:", error);
       toast({ title: "Failed to upload document", variant: "destructive" });
-    },
-  });
+    } finally {
+      setIsUploading(false);
+    }
+  };
 
-  const onSubmit = (data: DocumentUploadForm) => {
-    uploadMutation.mutate(data);
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setSelectedFile(file);
+    }
   };
 
   if (isLoading) {
@@ -98,119 +127,120 @@ export default function DocumentsPage() {
           <div>
             <p className="text-muted-foreground">Upload and manage your verification documents</p>
           </div>
-        <Dialog open={open} onOpenChange={setOpen}>
-          <DialogTrigger asChild>
-            <Button data-testid="button-upload-document">
-              <Plus className="w-4 h-4 mr-2" />
-              Upload Document
-            </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Upload Document</DialogTitle>
-              <DialogDescription>Add a document for verification</DialogDescription>
-            </DialogHeader>
-            <Form {...form}>
-              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-                <FormField
-                  control={form.control}
-                  name="documentType"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Document Type</FormLabel>
-                      <Select onValueChange={field.onChange} defaultValue={field.value}>
-                        <FormControl>
-                          <SelectTrigger data-testid="select-document-type">
-                            <SelectValue placeholder="Select document type" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {DOCUMENT_TYPES.map((type) => (
-                            <SelectItem key={type} value={type}>
-                              {documentTypeLabels[type]}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="fileName"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>File Name</FormLabel>
-                      <FormControl>
-                        <Input placeholder="e.g., drivers_license.pdf" {...field} data-testid="input-file-name" />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="fileUrl"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>File URL</FormLabel>
-                      <FormControl>
-                        <Input placeholder="https://..." {...field} data-testid="input-file-url" />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <Button type="submit" className="w-full" disabled={uploadMutation.isPending} data-testid="button-submit-document">
-                  {uploadMutation.isPending ? "Uploading..." : "Upload Document"}
-                </Button>
-              </form>
-            </Form>
-          </DialogContent>
-        </Dialog>
-      </div>
+          <Dialog open={open} onOpenChange={setOpen}>
+            <DialogTrigger asChild>
+              <Button data-testid="button-upload-document">
+                <Plus className="w-4 h-4 mr-2" />
+                Upload Document
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Upload Document</DialogTitle>
+                <DialogDescription>Select a file from your device to upload</DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label>Document Type</Label>
+                  <Select value={documentType} onValueChange={setDocumentType}>
+                    <SelectTrigger data-testid="select-document-type">
+                      <SelectValue placeholder="Select document type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="id_document">ID Document</SelectItem>
+                      <SelectItem value="drivers_license">Driver's License</SelectItem>
+                      <SelectItem value="vehicle_registration">Vehicle Registration</SelectItem>
+                      <SelectItem value="insurance">Insurance</SelectItem>
+                      <SelectItem value="other">Other</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
 
-      {!documents?.length ? (
-        <Card>
-          <CardContent className="flex flex-col items-center justify-center py-12">
-            <FileText className="w-12 h-12 text-muted-foreground mb-4" />
-            <h3 className="text-lg font-medium mb-2">No documents yet</h3>
-            <p className="text-muted-foreground text-center mb-4">
-              Upload your verification documents to get started
-            </p>
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="grid gap-4">
-          {documents.map((doc) => {
-            const statusInfo = statusConfig[doc.status];
-            const StatusIcon = statusInfo.icon;
-            return (
-              <Card key={doc.id} data-testid={`card-document-${doc.id}`}>
-                <CardContent className="flex items-center justify-between p-4">
-                  <div className="flex items-center gap-4">
-                    <div className="p-2 bg-primary/10 rounded-lg">
-                      <FileText className="w-6 h-6 text-primary" />
-                    </div>
-                    <div>
-                      <h3 className="font-medium" data-testid={`text-document-name-${doc.id}`}>{doc.fileName}</h3>
-                      <p className="text-sm text-muted-foreground">{documentTypeLabels[doc.documentType]}</p>
-                      {doc.rejectionReason && (
-                        <p className="text-sm text-destructive mt-1">Reason: {doc.rejectionReason}</p>
-                      )}
-                    </div>
+                <div className="space-y-2">
+                  <Label>Choose File</Label>
+                  <div 
+                    className="border-2 border-dashed rounded-lg p-6 text-center cursor-pointer hover:bg-muted/50 transition-colors"
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      className="hidden"
+                      onChange={handleFileChange}
+                      accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+                      data-testid="input-file-upload"
+                    />
+                    <Upload className="w-8 h-8 mx-auto mb-2 text-muted-foreground" />
+                    {selectedFile ? (
+                      <div>
+                        <p className="font-medium text-sm">{selectedFile.name}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {(selectedFile.size / 1024 / 1024).toFixed(2)} MB
+                        </p>
+                      </div>
+                    ) : (
+                      <div>
+                        <p className="font-medium text-sm">Click to select a file</p>
+                        <p className="text-xs text-muted-foreground">PDF, JPG, PNG, DOC (max 10MB)</p>
+                      </div>
+                    )}
                   </div>
-                  <Badge variant={statusInfo.variant} data-testid={`badge-status-${doc.id}`}>
-                    <StatusIcon className="w-3 h-3 mr-1" />
-                    {statusInfo.label}
-                  </Badge>
-                </CardContent>
-              </Card>
-            );
-          })}
+                </div>
+
+                <Button 
+                  onClick={uploadDocument}
+                  className="w-full" 
+                  disabled={isUploading || !selectedFile}
+                  data-testid="button-submit-document"
+                >
+                  <Upload className="w-4 h-4 mr-2" />
+                  {isUploading ? "Uploading..." : "Upload Document"}
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
         </div>
-      )}
+
+        {!documents?.length ? (
+          <Card>
+            <CardContent className="flex flex-col items-center justify-center py-12">
+              <FileText className="w-12 h-12 text-muted-foreground mb-4" />
+              <h3 className="text-lg font-medium mb-2">No documents yet</h3>
+              <p className="text-muted-foreground text-center mb-4">
+                Upload your verification documents to get started
+              </p>
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="grid gap-4">
+            {documents.map((doc) => {
+              const statusInfo = statusConfig[doc.status];
+              const StatusIcon = statusInfo.icon;
+              return (
+                <Card key={doc.id} data-testid={`card-document-${doc.id}`}>
+                  <CardContent className="flex items-center justify-between p-4">
+                    <div className="flex items-center gap-4">
+                      <div className="p-2 bg-primary/10 rounded-lg">
+                        <FileText className="w-6 h-6 text-primary" />
+                      </div>
+                      <div>
+                        <h3 className="font-medium" data-testid={`text-document-name-${doc.id}`}>{doc.fileName}</h3>
+                        <p className="text-sm text-muted-foreground">{documentTypeLabels[doc.documentType]}</p>
+                        {doc.rejectionReason && (
+                          <p className="text-sm text-destructive mt-1">Reason: {doc.rejectionReason}</p>
+                        )}
+                      </div>
+                    </div>
+                    <Badge variant={statusInfo.variant} data-testid={`badge-status-${doc.id}`}>
+                      <StatusIcon className="w-3 h-3 mr-1" />
+                      {statusInfo.label}
+                    </Badge>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        )}
       </div>
     </DashboardLayout>
   );

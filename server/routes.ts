@@ -2,6 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { setupAuth, registerAuthRoutes, isAuthenticated } from "./replit_integrations/auth";
+import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
 import { z } from "zod";
 import { 
   insertUserProfileSchema, 
@@ -35,10 +36,11 @@ const createBidSchema = insertBidSchema.omit({ loadId: true, transporterId: true
 const createTruckSchema = insertTruckSchema.omit({ ownerId: true });
 
 // Document validation - includes all POD document types
+// fileUrl can be a full URL or a relative path like /objects/...
 const createDocumentSchema = insertDocumentSchema.omit({ userId: true, status: true, verifiedBy: true, verifiedAt: true, rejectionReason: true }).extend({
   documentType: z.enum(["id_document", "drivers_license", "vehicle_registration", "insurance", "proof_of_delivery", "invoice", "delivery_note", "shipment_note", "waybill", "signed_pod", "other"]),
   fileName: z.string().min(1, "File name is required"),
-  fileUrl: z.string().url("Valid URL is required"),
+  fileUrl: z.string().min(1, "File path is required"),
 });
 
 // POD submission validation
@@ -92,6 +94,9 @@ export async function registerRoutes(
   // Setup authentication
   await setupAuth(app);
   registerAuthRoutes(app);
+  
+  // Setup object storage routes for file uploads
+  registerObjectStorageRoutes(app);
 
   // Helper to get user ID from request (supports both Google OAuth and Replit Auth)
   const getUserId = (req: any): string | null => {
@@ -149,6 +154,39 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error creating profile:", error);
       res.status(500).json({ message: "Failed to create profile" });
+    }
+  });
+
+  // Update profile
+  app.patch("/api/profile", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const existing = await storage.getProfile(userId);
+      if (!existing) {
+        return res.status(404).json({ message: "Profile not found" });
+      }
+
+      const updateSchema = z.object({
+        companyName: z.string().optional(),
+        phoneNumber: z.string().optional(),
+        city: z.string().optional(),
+        address: z.string().optional(),
+      });
+
+      const validationResult = updateSchema.safeParse(req.body);
+      if (!validationResult.success) {
+        return res.status(400).json({ message: "Invalid request body", errors: validationResult.error.errors });
+      }
+
+      const profile = await storage.updateProfile(userId, validationResult.data);
+      res.json(profile);
+    } catch (error) {
+      console.error("Error updating profile:", error);
+      res.status(500).json({ message: "Failed to update profile" });
     }
   });
 
