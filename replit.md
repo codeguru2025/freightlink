@@ -6,6 +6,14 @@ FreightLink ZW is a digital freight marketplace platform for Zimbabwe that conne
 
 ## Recent Changes
 
+- **2026-02-03**: Production-Ready Atomic Transactions
+  - Bid placement now uses DB transaction: reserves commission + creates bid atomically
+  - Bid acceptance uses DB transaction: all steps (deduct, accept, reject others, create job) in one atomic operation
+  - Per-bid commission tracking: reservedCommission field stores exact amount reserved at bid time
+  - Prevents race conditions: load status check within transaction prevents double acceptance
+  - Automatic rollback: if any step fails, entire transaction rolls back safely
+  - Commission flow: reserve at placement → deduct from reserved at acceptance → release on rejection
+
 - **2026-02-03**: Ride-Hailing Style Pricing Model
   - App calculates transport prices automatically: weight (tonnes) × distance (km) × $0.50/tonne-km
   - Shippers enter distance in km (with lookup table for Zimbabwe city pairs)
@@ -17,7 +25,7 @@ FreightLink ZW is a digital freight marketplace platform for Zimbabwe that conne
   - New load fields: distanceKm, basePrice, shipperTip, totalPrice
   - Configurable rates in shared/schema.ts: BASE_RATE_PER_TONNE_KM, COMMISSION_RATE_PER_TONNE_KM
   - **Testing Mode**: Commission deduction at bid acceptance is active
-  - **Production TODO**: No changes required, system is production-ready
+  - **Production Status**: System is production-ready with atomic transactions
 
 - **2026-02-03**: Reports & Summaries Feature
   - Added user reports page (/reports) for shippers and transporters

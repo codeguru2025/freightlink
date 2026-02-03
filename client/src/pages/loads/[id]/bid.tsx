@@ -55,7 +55,10 @@ export default function PlaceBidPage() {
   const tonnes = parseFloat(load?.weight || "0");
   const distanceKm = parseFloat(load?.distanceKm || "0");
   const estimatedCommission = calculateCommission(tonnes, distanceKm);
-  const walletBalance = parseFloat(wallet?.balance || "0");
+  // Use availableBalance (balance minus reserved) for accurate check
+  const walletBalance = parseFloat((wallet as any)?.availableBalance || wallet?.balance || "0");
+  const totalBalance = parseFloat(wallet?.balance || "0");
+  const reservedBalance = parseFloat((wallet as any)?.reservedBalance || "0");
   const hasEnoughBalance = walletBalance >= estimatedCommission;
 
   const form = useForm<BidFormValues>({
@@ -225,10 +228,21 @@ export default function PlaceBidPage() {
           <CardContent className="space-y-3">
             <div className="flex justify-between items-center text-sm">
               <span className="text-muted-foreground">Your Wallet Balance</span>
-              <span className={hasEnoughBalance ? "font-medium" : "font-medium text-orange-600"}>
+              <span className="font-medium">${totalBalance.toFixed(2)}</span>
+            </div>
+            {reservedBalance > 0 && (
+              <div className="flex justify-between items-center text-sm">
+                <span className="text-muted-foreground">Reserved (other pending bids)</span>
+                <span className="font-medium text-muted-foreground">-${reservedBalance.toFixed(2)}</span>
+              </div>
+            )}
+            <div className="flex justify-between items-center text-sm">
+              <span className="text-muted-foreground">Available for this bid</span>
+              <span className={hasEnoughBalance ? "font-medium text-primary" : "font-medium text-orange-600"}>
                 ${walletBalance.toFixed(2)}
               </span>
             </div>
+            <div className="border-t my-2" />
             <div className="flex justify-between items-center text-sm">
               <span className="text-muted-foreground">
                 Commission ({tonnes.toFixed(1)} t × {distanceKm.toFixed(0)} km × $0.05)
@@ -246,9 +260,9 @@ export default function PlaceBidPage() {
               <div className="flex items-start gap-2 p-3 bg-orange-500/10 rounded-lg text-sm">
                 <AlertCircle className="h-5 w-5 text-orange-600 flex-shrink-0 mt-0.5" />
                 <div>
-                  <p className="font-medium text-orange-700">Insufficient wallet balance</p>
+                  <p className="font-medium text-orange-700">Insufficient available balance</p>
                   <p className="text-muted-foreground">
-                    You need at least ${estimatedCommission.toFixed(2)} in your wallet. Commission is deducted when your bid is accepted.
+                    You need at least ${estimatedCommission.toFixed(2)} available to place this bid. Commission is reserved when you bid and deducted when accepted.
                   </p>
                   <Link href="/wallet">
                     <Button variant="outline" size="sm" className="mt-2" data-testid="button-topup-wallet">

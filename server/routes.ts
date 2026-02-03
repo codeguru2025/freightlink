@@ -442,7 +442,27 @@ export async function registerRoutes(
         });
       }
 
-      const bid = await storage.createBid({
+      // Calculate commission
+      const tonnes = parseFloat(load.weight) || 0;
+      const distanceKm = parseFloat(load.distanceKm || "0") || 0;
+      const commission = calculateCommission(tonnes, distanceKm);
+
+      // Pre-check balance before attempting atomic operation (for better error messages)
+      if (commission > 0) {
+        const availableBalance = await storage.getAvailableBalance(userId);
+        
+        if (availableBalance < commission) {
+          return res.status(400).json({ 
+            message: `Insufficient wallet balance to place bid. Required commission: $${commission.toFixed(2)}. Available balance: $${availableBalance.toFixed(2)}. Please top up your wallet before bidding.`,
+            requiredCommission: commission,
+            availableBalance: availableBalance,
+            shortfall: commission - availableBalance
+          });
+        }
+      }
+
+      // Use atomic bid creation with commission reservation
+      const bid = await storage.createBidWithReservation({
         loadId,
         transporterId: userId,
         amount,
@@ -451,11 +471,21 @@ export async function registerRoutes(
         truckId: truckId || null,
         notes: notes || null,
         status: "pending",
-      });
+      }, commission);
 
-      res.status(201).json(bid);
-    } catch (error) {
+      res.status(201).json({ 
+        ...bid, 
+        commissionReserved: commission > 0 ? commission : 0 
+      });
+    } catch (error: any) {
       console.error("Error creating bid:", error);
+      // Return specific error messages from atomic operation
+      if (error.message === "Wallet not found") {
+        return res.status(400).json({ message: "Please set up your wallet before placing bids" });
+      }
+      if (error.message === "Insufficient wallet balance") {
+        return res.status(400).json({ message: "Insufficient wallet balance. Please top up before bidding." });
+      }
       res.status(500).json({ message: "Failed to create bid" });
     }
   });
@@ -468,8 +498,9 @@ export async function registerRoutes(
       }
 
       const { id } = req.params;
-      const bid = await storage.getBid(id);
       
+      // Pre-flight checks (for better error messages before atomic operation)
+      const bid = await storage.getBid(id);
       if (!bid) {
         return res.status(404).json({ message: "Bid not found" });
       }
@@ -483,56 +514,31 @@ export async function registerRoutes(
         return res.status(400).json({ message: "This bid cannot be accepted" });
       }
 
-      // Calculate commission using tonnage x distance formula
-      const tonnes = parseFloat(load.weight) || 0;
-      const distanceKm = parseFloat(load.distanceKm || "0") || 0;
-      const commission = calculateCommission(tonnes, distanceKm);
-
-      // Check transporter wallet balance (only if commission > 0)
-      if (commission > 0) {
-        const wallet = await storage.getWalletByUserId(bid.transporterId);
-        const walletBalance = parseFloat(wallet?.balance || "0");
-        
-        if (walletBalance < commission) {
-          return res.status(400).json({ 
-            message: `Insufficient wallet balance. Commission of $${commission.toFixed(2)} is required. Current balance: $${walletBalance.toFixed(2)}. Please top up your wallet.` 
-          });
-        }
-
-        // Deduct commission immediately from transporter's wallet
-        await storage.deductFromWallet(bid.transporterId, commission.toString(), `Commission for bid on ${load.title}`);
-        
-        // Create a job reference after we have the job ID, we'll create the transaction record
+      if (load.status !== "posted") {
+        return res.status(400).json({ message: "This load has already been assigned. Bid acceptance is no longer possible." });
       }
 
-      // Accept this bid
-      await storage.updateBidStatus(id, "accepted");
-      
-      // Reject other bids for this load
-      const otherBids = await storage.getBidsForLoad(bid.loadId);
-      for (const otherBid of otherBids) {
-        if (otherBid.id !== id && otherBid.status === "pending") {
-          await storage.updateBidStatus(otherBid.id, "rejected");
-        }
-      }
+      // Use atomic bid acceptance (handles all steps in a transaction)
+      const result = await storage.acceptBidAtomic(id, bid.loadId);
 
-      // Update load status
-      await storage.updateLoadStatus(bid.loadId, "accepted");
-
-      // Create job
-      const job = await storage.createJob({
-        loadId: bid.loadId,
-        bidId: bid.id,
-        shipperId: load.shipperId,
-        transporterId: bid.transporterId,
-        agreedAmount: bid.amount,
-        currency: bid.currency || "USD",
-        status: "accepted",
+      res.json({ 
+        bid: result.bid, 
+        job: result.job, 
+        commissionDeducted: result.commissionDeducted,
+        otherBidsRejected: result.otherBidsRejected
       });
-
-      res.json({ bid: await storage.getBid(id), job, commissionDeducted: commission });
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error accepting bid:", error);
+      // Return specific error messages from atomic operation
+      if (error.message === "Load already accepted or not found") {
+        return res.status(400).json({ message: "This load has already been assigned. Bid acceptance is no longer possible." });
+      }
+      if (error.message === "Bid not found or does not match load") {
+        return res.status(404).json({ message: "Bid not found" });
+      }
+      if (error.message === "Bid already processed") {
+        return res.status(400).json({ message: "This bid has already been processed" });
+      }
       res.status(500).json({ message: "Failed to accept bid" });
     }
   });
@@ -558,6 +564,12 @@ export async function registerRoutes(
 
       if (bid.status !== "pending") {
         return res.status(400).json({ message: "This bid cannot be rejected" });
+      }
+
+      // Release the reserved commission for this bid (using the stored amount)
+      const bidReservedCommission = parseFloat(bid.reservedCommission || "0");
+      if (bidReservedCommission > 0) {
+        await storage.releaseReservedCommission(bid.transporterId, bidReservedCommission);
       }
 
       const updated = await storage.updateBidStatus(id, "rejected");
@@ -1252,7 +1264,12 @@ export async function registerRoutes(
       if (!userId) return res.status(401).json({ message: "Unauthorized" });
 
       const wallet = await storage.getOrCreateWallet(userId);
-      res.json(wallet);
+      const availableBalance = await storage.getAvailableBalance(userId);
+      
+      res.json({
+        ...wallet,
+        availableBalance: availableBalance.toString(),
+      });
     } catch (error) {
       console.error("Error fetching wallet:", error);
       res.status(500).json({ message: "Failed to fetch wallet" });
@@ -1295,8 +1312,8 @@ export async function registerRoutes(
       const wallet = await storage.getOrCreateWallet(userId);
 
       // Check if Paynow credentials are configured
-      const integrationId = process.env.PAYNOW_INTEGRATION_ID;
-      const integrationKey = process.env.PAYNOW_INTEGRATION_KEY;
+      const integrationId = process.env.PAYNOW_ID || process.env.PAYNOW_INTEGRATION_ID;
+      const integrationKey = process.env.PAYNOW_KEY || process.env.PAYNOW_INTEGRATION_KEY;
 
       // Create unique reference
       const reference = `FLZW-${userId.slice(-8)}-${Date.now()}`;

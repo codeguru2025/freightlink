@@ -139,6 +139,10 @@ export interface IStorage {
   getOrCreateWallet(userId: string): Promise<Wallet>;
   updateWalletBalance(userId: string, amount: number): Promise<Wallet | undefined>;
   deductCommission(userId: string, jobId: string, amount: number): Promise<WalletTransaction | undefined>;
+  reserveCommission(userId: string, bidId: string, amount: number): Promise<boolean>;
+  releaseReservedCommission(userId: string, amount: number): Promise<boolean>;
+  deductFromReserved(userId: string, bidId: string, amount: number, description: string): Promise<WalletTransaction | undefined>;
+  getAvailableBalance(userId: string): Promise<number>;
   
   // Wallet transactions
   getWalletTransactions(userId: string): Promise<WalletTransaction[]>;
@@ -149,6 +153,10 @@ export interface IStorage {
   
   // Marketplace with wallet filter
   getAvailableLoadsForTransporter(userId: string): Promise<Load[]>;
+
+  // Atomic operations
+  createBidWithReservation(bid: InsertBid, commission: number): Promise<Bid>;
+  acceptBidAtomic(bidId: string, loadId: string): Promise<{ bid: Bid; job: Job; otherBidsRejected: number; commissionDeducted: number }>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -887,6 +895,83 @@ export class DatabaseStorage implements IStorage {
     return transaction;
   }
 
+  async reserveCommission(userId: string, bidId: string, amount: number): Promise<boolean> {
+    const wallet = await this.getOrCreateWallet(userId);
+    const balance = Number(wallet.balance);
+    const reserved = Number(wallet.reservedBalance || "0");
+    const available = balance - reserved;
+
+    if (available < amount) {
+      return false;
+    }
+
+    const newReserved = reserved + amount;
+    await db
+      .update(wallets)
+      .set({ reservedBalance: newReserved.toString(), updatedAt: new Date() })
+      .where(eq(wallets.userId, userId));
+    
+    return true;
+  }
+
+  async releaseReservedCommission(userId: string, amount: number): Promise<boolean> {
+    const wallet = await this.getWallet(userId);
+    if (!wallet) return false;
+
+    const reserved = Number(wallet.reservedBalance || "0");
+    const newReserved = Math.max(0, reserved - amount);
+    
+    await db
+      .update(wallets)
+      .set({ reservedBalance: newReserved.toString(), updatedAt: new Date() })
+      .where(eq(wallets.userId, userId));
+    
+    return true;
+  }
+
+  async deductFromReserved(userId: string, bidId: string, amount: number, description: string): Promise<WalletTransaction | undefined> {
+    const wallet = await this.getWallet(userId);
+    if (!wallet) return undefined;
+
+    const balance = Number(wallet.balance);
+    const reserved = Number(wallet.reservedBalance || "0");
+
+    const newBalance = balance - amount;
+    const newReserved = Math.max(0, reserved - amount);
+
+    await db
+      .update(wallets)
+      .set({ 
+        balance: newBalance.toString(), 
+        reservedBalance: newReserved.toString(), 
+        updatedAt: new Date() 
+      })
+      .where(eq(wallets.userId, userId));
+
+    const transaction = await this.createWalletTransaction({
+      walletId: wallet.id,
+      userId,
+      type: "commission_deduction",
+      amount: amount.toString(),
+      currency: wallet.currency || "USD",
+      status: "completed",
+      reference: `bid-${bidId}`,
+      description,
+      completedAt: new Date(),
+    });
+
+    return transaction;
+  }
+
+  async getAvailableBalance(userId: string): Promise<number> {
+    const wallet = await this.getWallet(userId);
+    if (!wallet) return 0;
+    
+    const balance = Number(wallet.balance);
+    const reserved = Number(wallet.reservedBalance || "0");
+    return balance - reserved;
+  }
+
   // Wallet transactions
   async getWalletTransactions(userId: string): Promise<WalletTransaction[]> {
     return await db
@@ -944,6 +1029,188 @@ export class DatabaseStorage implements IStorage {
       .orderBy(desc(loads.createdAt));
 
     return allLoads;
+  }
+
+  // Atomic bid creation with commission reservation
+  async createBidWithReservation(bid: InsertBid, commission: number): Promise<Bid> {
+    return await db.transaction(async (tx) => {
+      // 1. Lock wallet row FOR UPDATE to prevent concurrent reservations
+      const lockResult = await tx.execute(
+        sql`SELECT id, balance, reserved_balance FROM wallets WHERE user_id = ${bid.transporterId} FOR UPDATE`
+      );
+      
+      if (!lockResult.rows || lockResult.rows.length === 0) {
+        throw new Error("Wallet not found");
+      }
+      
+      const walletRow = lockResult.rows[0] as { id: string; balance: string; reserved_balance: string };
+      const balance = parseFloat(walletRow.balance);
+      const reservedBalance = parseFloat(walletRow.reserved_balance);
+      const availableBalance = balance - reservedBalance;
+      
+      if (availableBalance < commission) {
+        throw new Error("Insufficient wallet balance");
+      }
+      
+      // 2. Atomically increment reservedBalance using SQL arithmetic
+      await tx.execute(
+        sql`UPDATE wallets SET reserved_balance = reserved_balance + ${commission.toFixed(2)}::decimal, updated_at = NOW() WHERE user_id = ${bid.transporterId}`
+      );
+      
+      // 3. Create the bid with the reserved commission stored
+      const bidWithCommission = {
+        ...bid,
+        reservedCommission: commission.toFixed(2)
+      };
+      const [newBid] = await tx.insert(bids).values(bidWithCommission).returning();
+      
+      return newBid;
+    });
+  }
+
+  // Atomic bid acceptance with commission deduction
+  async acceptBidAtomic(bidId: string, loadId: string): Promise<{ bid: Bid; job: Job; otherBidsRejected: number; commissionDeducted: number }> {
+    return await db.transaction(async (tx) => {
+      // 1. Lock load row FOR UPDATE and verify status (prevents double acceptance)
+      const loadResult = await tx.execute(
+        sql`SELECT * FROM loads WHERE id = ${loadId} AND status = 'posted' FOR UPDATE`
+      );
+      
+      if (!loadResult.rows || loadResult.rows.length === 0) {
+        throw new Error("Load already accepted or not found");
+      }
+      
+      const load = loadResult.rows[0] as any;
+      
+      // 2. Get and verify the bid
+      const bidResult = await tx.execute(
+        sql`SELECT * FROM bids WHERE id = ${bidId} FOR UPDATE`
+      );
+      
+      if (!bidResult.rows || bidResult.rows.length === 0) {
+        throw new Error("Bid not found or does not match load");
+      }
+      
+      const bid = bidResult.rows[0] as any;
+      
+      if (bid.load_id !== loadId) {
+        throw new Error("Bid not found or does not match load");
+      }
+      
+      if (bid.status !== "pending") {
+        throw new Error("Bid already processed");
+      }
+      
+      // 3. Update load status to "accepted" immediately
+      await tx.execute(
+        sql`UPDATE loads SET status = 'accepted' WHERE id = ${loadId}`
+      );
+      
+      // 4. Lock transporter's wallet FOR UPDATE
+      const walletResult = await tx.execute(
+        sql`SELECT * FROM wallets WHERE user_id = ${bid.transporter_id} FOR UPDATE`
+      );
+      
+      const commissionDeducted = parseFloat(bid.reserved_commission || "0");
+      let walletId = null;
+      
+      if (walletResult.rows && walletResult.rows.length > 0 && commissionDeducted > 0) {
+        const wallet = walletResult.rows[0] as any;
+        walletId = wallet.id;
+        
+        // 5. Atomically deduct from both balance and reservedBalance using SQL arithmetic
+        await tx.execute(
+          sql`UPDATE wallets SET 
+            balance = balance - ${commissionDeducted.toFixed(2)}::decimal,
+            reserved_balance = reserved_balance - ${commissionDeducted.toFixed(2)}::decimal,
+            updated_at = NOW()
+          WHERE user_id = ${bid.transporter_id}`
+        );
+        
+        // 6. Record the commission deduction transaction
+        await tx.insert(walletTransactions).values({
+          walletId: wallet.id,
+          userId: bid.transporter_id,
+          type: "commission_deduction",
+          amount: commissionDeducted.toFixed(2),
+          currency: "USD",
+          status: "completed",
+          description: `Commission for load ${loadId}`,
+          reference: `COMM-${loadId}-${Date.now()}`
+        });
+      }
+      
+      // 7. Accept the winning bid and clear reserved commission
+      await tx.execute(
+        sql`UPDATE bids SET status = 'accepted', reserved_commission = '0' WHERE id = ${bidId}`
+      );
+      
+      // 8. First, SELECT pending bids with FOR UPDATE to lock them and capture their old values
+      const pendingBidsResult = await tx.execute(
+        sql`SELECT id, transporter_id, reserved_commission FROM bids 
+            WHERE load_id = ${loadId} AND status = 'pending' 
+            FOR UPDATE`
+      );
+      
+      let otherBidsRejected = 0;
+      const reservedByTransporter = new Map<string, number>();
+      const pendingBidIds: string[] = [];
+      
+      if (pendingBidsResult.rows && pendingBidsResult.rows.length > 0) {
+        // Capture old reserved commission values and IDs BEFORE updating
+        for (const pendingBid of pendingBidsResult.rows as any[]) {
+          const oldReserved = parseFloat(pendingBid.reserved_commission || "0");
+          pendingBidIds.push(pendingBid.id);
+          
+          if (oldReserved > 0) {
+            const current = reservedByTransporter.get(pendingBid.transporter_id) || 0;
+            reservedByTransporter.set(pendingBid.transporter_id, current + oldReserved);
+          }
+          
+          otherBidsRejected++;
+        }
+        
+        // Now atomically reject ONLY the specific bids we locked (by explicit IDs)
+        if (pendingBidIds.length > 0) {
+          await tx.execute(
+            sql`UPDATE bids SET status = 'rejected', reserved_commission = '0' 
+                WHERE id = ANY(${pendingBidIds})`
+          );
+        }
+      }
+      
+      // 9. Release aggregated reserved commissions per transporter
+      for (const [transporterId, totalReserved] of reservedByTransporter) {
+        await tx.execute(
+          sql`UPDATE wallets SET 
+            reserved_balance = GREATEST(0, reserved_balance - ${totalReserved.toFixed(2)}::decimal),
+            updated_at = NOW()
+          WHERE user_id = ${transporterId}`
+        );
+      }
+      
+      // 10. Create the job with status "accepted" and all required fields
+      const [job] = await tx.insert(jobs).values({
+        loadId,
+        shipperId: load.shipper_id,
+        transporterId: bid.transporter_id,
+        bidId: bidId,
+        agreedAmount: bid.amount,
+        currency: bid.currency || "USD",
+        status: "accepted",
+        paymentStatus: "pending"
+      }).returning();
+      
+      // 10. Fetch the updated bid for return
+      const [acceptedBid] = await tx.select().from(bids).where(eq(bids.id, bidId));
+      
+      return { 
+        bid: acceptedBid, 
+        job, 
+        otherBidsRejected,
+        commissionDeducted
+      };
+    });
   }
 }
 
