@@ -4,10 +4,20 @@ import { LoadCard, LoadCardSkeleton } from "@/components/load-card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent } from "@/components/ui/card";
-import { Search, Package, MapPin, Filter } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Search, Package, MapPin, Filter, Wallet, AlertCircle } from "lucide-react";
 import { useState } from "react";
-import { useLocation } from "wouter";
+import { Link, useLocation } from "wouter";
 import type { Load } from "@shared/schema";
+
+interface MarketplaceResponse {
+  loads: Load[];
+  walletBalance?: string;
+  currency?: string;
+  commissionRate?: number;
+  message?: string;
+}
 
 const zimbabweCities = [
   "All Cities",
@@ -29,11 +39,17 @@ export default function MarketplacePage() {
   const [destinationFilter, setDestinationFilter] = useState("All Cities");
   const [, navigate] = useLocation();
 
-  const { data: loads, isLoading } = useQuery<Load[]>({
+  const { data: marketplaceData, isLoading } = useQuery<MarketplaceResponse>({
     queryKey: ["/api/marketplace"],
   });
 
-  const filteredLoads = loads?.filter((load) => {
+  const loads = marketplaceData?.loads || [];
+  const walletBalance = marketplaceData?.walletBalance ? Number(marketplaceData.walletBalance) : null;
+  const commissionRate = marketplaceData?.commissionRate || 0.10;
+  const currency = marketplaceData?.currency || "USD";
+  const walletMessage = marketplaceData?.message;
+
+  const filteredLoads = loads.filter((load) => {
     const matchesSearch = !searchQuery || 
       load.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
       load.originCity.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -50,6 +66,56 @@ export default function MarketplacePage() {
   return (
     <DashboardLayout title="Available Loads" breadcrumbs={[{ label: "Marketplace" }]}>
       <div className="space-y-6">
+        {walletBalance !== null && (
+          <Card className={walletBalance > 0 ? "border-primary/30 bg-primary/5" : "border-orange-500/30 bg-orange-500/5"}>
+            <CardContent className="p-4">
+              <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className={`p-2 rounded-full ${walletBalance > 0 ? "bg-primary/10" : "bg-orange-500/10"}`}>
+                    <Wallet className={`h-5 w-5 ${walletBalance > 0 ? "text-primary" : "text-orange-600"}`} />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold" data-testid="text-wallet-balance-marketplace">
+                        Balance: ${walletBalance.toFixed(2)} {currency}
+                      </span>
+                      {walletBalance === 0 && (
+                        <Badge variant="destructive" className="text-xs">
+                          <AlertCircle className="w-3 h-3 mr-1" />
+                          Empty
+                        </Badge>
+                      )}
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      {walletBalance > 0 
+                        ? `You can bid on loads up to $${(walletBalance / commissionRate).toFixed(0)} (10% commission)`
+                        : "Top up your wallet to see and bid on loads"
+                      }
+                    </p>
+                  </div>
+                </div>
+                <Link href="/wallet">
+                  <Button variant={walletBalance > 0 ? "outline" : "default"} data-testid="button-topup-marketplace">
+                    <Wallet className="w-4 h-4 mr-2" />
+                    {walletBalance > 0 ? "Manage Wallet" : "Top Up Now"}
+                  </Button>
+                </Link>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {walletMessage && (
+          <Card className="border-orange-500/30 bg-orange-500/5">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-2 text-orange-600">
+                <AlertCircle className="h-5 w-5" />
+                <span>{walletMessage}</span>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         <Card>
           <CardContent className="p-4">
             <div className="flex flex-col lg:flex-row gap-4">

@@ -40,6 +40,7 @@ import {
   Star,
   AlertTriangle,
   Receipt,
+  Wallet,
 } from "lucide-react";
 import type { UserProfile } from "@shared/schema";
 import logoPath from "@assets/ChatGPT_Image_Feb_1,_2026,_09_08_34_AM_1769930479384.png";
@@ -66,6 +67,7 @@ export function AppSidebar() {
 
   const transporterMenuItems = [
     { title: "Dashboard", url: "/dashboard", icon: Home },
+    { title: "Wallet", url: "/wallet", icon: Wallet },
     { title: "Available Loads", url: "/marketplace", icon: List },
     { title: "My Bids", url: "/bids", icon: Gavel },
     { title: "My Jobs", url: "/jobs", icon: Briefcase },
