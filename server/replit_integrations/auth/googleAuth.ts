@@ -116,9 +116,23 @@ export async function setupAuth(app: Express) {
   // Callback route - handles Google response
   app.get("/api/callback", (req, res, next) => {
     const strategyName = ensureStrategy(req.hostname);
-    passport.authenticate(strategyName, {
-      successRedirect: "/",
-      failureRedirect: "/api/login",
+    passport.authenticate(strategyName, (err: any, user: any, info: any) => {
+      if (err) {
+        console.error("OAuth callback error:", err);
+        return res.redirect("/api/login");
+      }
+      if (!user) {
+        console.error("OAuth callback - no user:", info);
+        return res.redirect("/api/login");
+      }
+      req.logIn(user, (loginErr) => {
+        if (loginErr) {
+          console.error("Login error:", loginErr);
+          return res.redirect("/api/login");
+        }
+        console.log("OAuth login successful for user:", user.id || user.email);
+        return res.redirect("/");
+      });
     })(req, res, next);
   });
 
