@@ -4,6 +4,7 @@ import { storage } from "./storage";
 import { setupAuth, registerAuthRoutes, isAuthenticated } from "./replit_integrations/auth";
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
 import { z } from "zod";
+import crypto from "crypto";
 import { 
   insertUserProfileSchema, 
   insertLoadSchema, 
@@ -1290,92 +1291,141 @@ export async function registerRoutes(
     }
   });
 
-  // Top-up wallet validation schema
+  // Top-up wallet validation schema with enhanced security
   const topupSchema = z.object({
-    amount: z.number().min(1, "Amount must be at least 1 USD"),
-    phone: z.string().min(10, "Valid phone number required"),
+    amount: z.number()
+      .min(1, "Minimum top-up is $1")
+      .max(10000, "Maximum top-up is $10,000"),
+    phone: z.string()
+      .regex(/^(0|263|\+263)?(77|78|71|73)[0-9]{7}$/, "Enter a valid Zimbabwe mobile number (e.g., 0771234567)"),
     method: z.enum(["ecocash", "onemoney"]).default("ecocash"),
   });
 
-  // Initiate wallet top-up via Paynow/EcoCash
-  app.post("/api/wallet/topup", isAuthenticated, async (req, res) => {
-    try {
-      const userId = getUserId(req);
-      if (!userId) return res.status(401).json({ message: "Unauthorized" });
+  // Normalize phone number to international format
+  function normalizeZimbabwePhone(phone: string): string {
+    const cleaned = phone.replace(/[^0-9]/g, "");
+    if (cleaned.startsWith("263")) return cleaned;
+    if (cleaned.startsWith("0")) return "263" + cleaned.slice(1);
+    return "263" + cleaned;
+  }
 
+  // Initiate wallet top-up via Paynow/EcoCash with enhanced security
+  app.post("/api/wallet/topup", isAuthenticated, async (req, res) => {
+    const userId = getUserId(req);
+    if (!userId) return res.status(401).json({ message: "Unauthorized" });
+
+    try {
+      // Validate request body first
       const validationResult = topupSchema.safeParse(req.body);
       if (!validationResult.success) {
-        return res.status(400).json({ message: "Invalid request body", errors: validationResult.error.errors });
+        return res.status(400).json({ 
+          message: "Invalid request", 
+          errors: validationResult.error.errors.map(e => e.message)
+        });
       }
 
-      const { amount, phone, method } = validationResult.data;
+      const { amount, method } = validationResult.data;
+      const phone = normalizeZimbabwePhone(validationResult.data.phone);
+      
+      // Get or create wallet
       const wallet = await storage.getOrCreateWallet(userId);
 
       // Check if Paynow credentials are configured
       const integrationId = process.env.PAYNOW_ID || process.env.PAYNOW_INTEGRATION_ID;
       const integrationKey = process.env.PAYNOW_KEY || process.env.PAYNOW_INTEGRATION_KEY;
 
-      // Create unique reference
-      const reference = `FLZW-${userId.slice(-8)}-${Date.now()}`;
+      // Create unique reference with timestamp and random component
+      const randomSuffix = crypto.randomBytes(4).toString("hex");
+      const reference = `FLZW-${userId.slice(-8)}-${Date.now()}-${randomSuffix}`;
 
       // TEST MODE: If Paynow is not configured, simulate instant top-up
       if (!integrationId || !integrationKey) {
-        // Create completed transaction immediately
-        const transaction = await storage.createWalletTransaction({
-          walletId: wallet.id,
-          userId,
-          type: "deposit",
-          amount: amount.toString(),
-          currency: "USD",
-          status: "completed",
-          reference,
-          description: `Wallet top-up via ${method} (Test Mode)`,
-        });
-
-        // Credit wallet immediately
+        // Use atomic method for test mode too
+        const atomicResult = await storage.createPendingDepositAtomic(
+          userId, wallet.id, amount, reference, `${method} (Test Mode)`
+        );
+        
+        if (atomicResult.rateLimited) {
+          console.warn(`[SECURITY] Rate limit exceeded for user ${userId}`);
+          return res.status(429).json({ 
+            message: "Too many payment attempts. Please try again in a few minutes."
+          });
+        }
+        
+        if (atomicResult.hasPending) {
+          return res.status(400).json({ 
+            message: "You have a payment in progress. Please wait for it to complete or try again in a few minutes."
+          });
+        }
+        
+        if (atomicResult.dailyLimitExceeded) {
+          return res.status(400).json({ 
+            message: "Daily deposit limit of $50,000 exceeded."
+          });
+        }
+        
+        // Update to completed and credit wallet
+        await storage.updateTransactionStatus(atomicResult.transaction!.id, "completed", undefined);
         await storage.updateWalletBalance(userId, amount);
 
+        console.log(`[TEST MODE] Wallet top-up: User ${userId}, Amount $${amount}, Ref ${reference}`);
+        
         return res.json({
           success: true,
           reference,
-          transactionId: transaction.id,
+          transactionId: atomicResult.transaction!.id,
           testMode: true,
           message: `Test mode: $${amount.toFixed(2)} credited to your wallet instantly.`
         });
       }
 
+      // PRODUCTION MODE: Use atomic pending transaction creation
+      const atomicResult = await storage.createPendingDepositAtomic(
+        userId, wallet.id, amount, reference, method
+      );
+      
+      if (atomicResult.rateLimited) {
+        console.warn(`[SECURITY] Rate limit exceeded for user ${userId}`);
+        return res.status(429).json({ 
+          message: "Too many payment attempts. Please try again in a few minutes."
+        });
+      }
+      
+      if (atomicResult.hasPending) {
+        return res.status(400).json({ 
+          message: "You have a payment in progress. Please wait for it to complete or try again in a few minutes."
+        });
+      }
+      
+      if (atomicResult.dailyLimitExceeded) {
+        return res.status(400).json({ 
+          message: "Daily deposit limit of $50,000 exceeded."
+        });
+      }
+      
+      const transaction = atomicResult.transaction!;
+
       // PRODUCTION MODE: Use Paynow for real payments
-      // Import Paynow SDK dynamically
       const { Paynow } = await import("paynow");
       const paynow = new Paynow(integrationId, integrationKey);
       
       // Set URLs for callbacks
-      const baseUrl = process.env.REPLIT_URL || `https://${process.env.REPLIT_DOMAINS?.split(',')[0]}`;
+      const domain = process.env.REPLIT_DOMAINS?.split(',')[0] || process.env.REPLIT_DEV_DOMAIN;
+      const baseUrl = domain ? `https://${domain}` : "https://localhost:5000";
       paynow.resultUrl = `${baseUrl}/api/wallet/paynow-webhook`;
       paynow.returnUrl = `${baseUrl}/wallet?topup=success`;
 
       // Create payment
       const payment = paynow.createPayment(reference);
-      payment.add("Wallet Top-up", amount);
+      payment.add("FreightLink ZW Wallet Top-up", amount);
 
-      // Create pending transaction record
-      const transaction = await storage.createWalletTransaction({
-        walletId: wallet.id,
-        userId,
-        type: "deposit",
-        amount: amount.toString(),
-        currency: "USD",
-        status: "pending",
-        reference,
-        description: `Wallet top-up via ${method}`,
-      });
+      console.log(`[PAYMENT] Initiating Paynow payment: User ${userId}, Amount $${amount}, Phone ${phone}, Method ${method}, Ref ${reference}`);
 
       // Send mobile payment request
       const response = await paynow.sendMobile(payment, phone, method);
 
       if (response.success) {
-        // Update transaction with poll URL
-        await storage.updateTransactionStatus(transaction.id, "pending", undefined);
+        console.log(`[PAYMENT] Paynow payment initiated successfully: Ref ${reference}`);
         
         res.json({
           success: true,
@@ -1388,49 +1438,127 @@ export async function registerRoutes(
       } else {
         // Mark transaction as failed
         await storage.updateTransactionStatus(transaction.id, "failed", undefined);
+        
+        console.error(`[PAYMENT] Paynow payment failed: Ref ${reference}, Error: ${response.error}`);
+        
         res.status(400).json({ 
           success: false, 
-          message: response.error || "Payment initiation failed" 
+          message: response.error || "Payment initiation failed. Please check your phone number and try again."
         });
       }
-    } catch (error) {
-      console.error("Error initiating top-up:", error);
-      res.status(500).json({ message: "Failed to initiate payment" });
+    } catch (error: any) {
+      console.error("[PAYMENT] Error initiating top-up:", error?.message || error);
+      res.status(500).json({ message: "Failed to initiate payment. Please try again." });
     }
   });
 
-  // Paynow webhook for payment confirmation
+  // Paynow webhook for payment confirmation with MANDATORY security verification
+  // Uses raw body for hash verification as per Paynow documentation
   app.post("/api/wallet/paynow-webhook", async (req, res) => {
     try {
-      const { reference, status, amount, paynowreference } = req.body;
+      const { reference, status, amount, paynowreference, hash } = req.body;
+      const integrationKey = process.env.PAYNOW_KEY || process.env.PAYNOW_INTEGRATION_KEY;
+      const isProduction = !!integrationKey;
 
-      console.log("Paynow webhook received:", { reference, status, amount, paynowreference });
+      console.log("[WEBHOOK] Paynow webhook received:", { reference, status, amount, paynowreference });
 
-      if (!reference) {
-        return res.status(400).send("Missing reference");
+      // Security: Validate required fields
+      if (!reference || !status) {
+        console.error("[WEBHOOK] Missing required fields");
+        return res.status(400).send("Missing required fields");
+      }
+
+      // CRITICAL: In production, REQUIRE hash verification - reject unsigned requests
+      if (isProduction) {
+        if (!hash) {
+          console.error("[WEBHOOK] SECURITY: Missing hash in production - rejecting unsigned request");
+          return res.status(403).send("Signature required");
+        }
+        
+        // SECURITY: Require raw body for accurate hash verification
+        if (!req.rawBody || !Buffer.isBuffer(req.rawBody)) {
+          console.error("[WEBHOOK] SECURITY: Raw body not available - cannot verify hash securely");
+          return res.status(400).send("Invalid request format");
+        }
+        
+        // Paynow official hash algorithm: 
+        // 1. Concatenate ALL values (except hash) in the ORDER received
+        // 2. Append integration key
+        // 3. SHA512 hash → uppercase hex
+        // Using raw body to preserve exact field order
+        const rawString = req.rawBody.toString('utf-8');
+        const pairs = rawString.split('&');
+        const values: string[] = [];
+        
+        for (const pair of pairs) {
+          const [key, value] = pair.split('=');
+          if (key !== 'hash') {
+            // Normalize "+" to space before URL decoding (urlencoded form data)
+            values.push(decodeURIComponent((value || '').replace(/\+/g, ' ')));
+          }
+        }
+        const dataToHash = values.join('') + integrationKey;
+        
+        const expectedHash = crypto.createHash('sha512').update(dataToHash).digest('hex').toUpperCase();
+        
+        // Use timing-safe comparison to prevent timing attacks
+        const hashMatch = hash.length === expectedHash.length && 
+          crypto.timingSafeEqual(Buffer.from(hash.toUpperCase()), Buffer.from(expectedHash));
+        
+        if (!hashMatch) {
+          console.error("[WEBHOOK] SECURITY: Invalid hash signature - possible tampering attempt");
+          return res.status(403).send("Invalid signature");
+        }
+        
+        console.log("[WEBHOOK] Hash verification passed");
+      } else {
+        console.warn("[WEBHOOK] Test mode - skipping hash verification");
+      }
+
+      // Security: Validate reference format (must match our pattern)
+      if (!reference.startsWith("FLZW-")) {
+        console.error("[WEBHOOK] Invalid reference format:", reference);
+        return res.status(400).send("Invalid reference format");
       }
 
       const transaction = await storage.getTransactionByReference(reference);
       if (!transaction) {
-        console.error("Transaction not found for reference:", reference);
+        console.error("[WEBHOOK] Transaction not found for reference:", reference);
         return res.status(404).send("Transaction not found");
       }
 
-      if (status === "Paid" || status === "paid") {
+      // Security: Prevent double-processing of completed transactions
+      if (transaction.status === "completed") {
+        console.warn("[WEBHOOK] Transaction already completed:", reference);
+        return res.status(200).send("Already processed");
+      }
+
+      // Security: Verify amount matches (if provided)
+      if (amount && Math.abs(Number(amount) - Number(transaction.amount)) > 0.01) {
+        console.error("[WEBHOOK] Amount mismatch - expected:", transaction.amount, "received:", amount);
+        return res.status(400).send("Amount mismatch");
+      }
+
+      const normalizedStatus = status.toLowerCase();
+      
+      if (normalizedStatus === "paid") {
         // Update transaction status
         await storage.updateTransactionStatus(transaction.id, "completed", paynowreference);
         
         // Credit wallet
         await storage.updateWalletBalance(transaction.userId, Number(transaction.amount));
         
-        console.log(`Wallet credited: User ${transaction.userId}, Amount ${transaction.amount}`);
-      } else if (status === "Cancelled" || status === "Failed") {
+        console.log(`[WEBHOOK] Wallet credited: User ${transaction.userId}, Amount $${transaction.amount}, Ref ${reference}`);
+      } else if (normalizedStatus === "cancelled" || normalizedStatus === "failed") {
         await storage.updateTransactionStatus(transaction.id, "failed", paynowreference);
+        console.log(`[WEBHOOK] Payment failed: User ${transaction.userId}, Ref ${reference}, Status ${status}`);
+      } else {
+        console.log(`[WEBHOOK] Intermediate status: ${status} for ${reference}`);
       }
 
       res.status(200).send("OK");
-    } catch (error) {
-      console.error("Error processing Paynow webhook:", error);
+    } catch (error: any) {
+      console.error("[WEBHOOK] Error processing Paynow webhook:", error?.message || error);
       res.status(500).send("Error");
     }
   });

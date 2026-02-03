@@ -20,7 +20,15 @@ app.use(
   }),
 );
 
-app.use(express.urlencoded({ extended: false }));
+// Capture raw body for urlencoded requests (needed for Paynow webhook hash verification)
+app.use(
+  express.urlencoded({ 
+    extended: false,
+    verify: (req, _res, buf) => {
+      req.rawBody = buf;
+    },
+  })
+);
 
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {

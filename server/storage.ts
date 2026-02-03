@@ -157,6 +157,9 @@ export interface IStorage {
   // Atomic operations
   createBidWithReservation(bid: InsertBid, commission: number): Promise<Bid>;
   acceptBidAtomic(bidId: string, loadId: string): Promise<{ bid: Bid; job: Job; otherBidsRejected: number; commissionDeducted: number }>;
+  
+  // Atomic payment operations with row locking for race condition prevention
+  createPendingDepositAtomic(userId: string, walletId: string, amount: number, reference: string, method: string): Promise<{ transaction: WalletTransaction | null; hasPending: boolean; rateLimited: boolean; dailyLimitExceeded: boolean }>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1015,6 +1018,95 @@ export class DatabaseStorage implements IStorage {
       .from(walletTransactions)
       .where(eq(walletTransactions.reference, reference));
     return transaction || undefined;
+  }
+
+  // Atomic pending deposit creation with rate limiting, duplicate prevention, and row locking
+  async createPendingDepositAtomic(
+    userId: string, 
+    walletId: string, 
+    amount: number, 
+    reference: string, 
+    method: string
+  ): Promise<{ transaction: WalletTransaction | null; hasPending: boolean; rateLimited: boolean; dailyLimitExceeded: boolean }> {
+    const RATE_LIMIT = 5;
+    const RATE_WINDOW_MS = 15 * 60 * 1000; // 15 minutes
+    const PENDING_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
+    const DAILY_LIMIT = 50000; // $50,000 daily limit
+    
+    return await db.transaction(async (tx) => {
+      // CRITICAL: Lock the wallet row first to serialize all deposit requests for this user
+      // This prevents race conditions where multiple concurrent requests pass checks
+      await tx.execute(sql`SELECT id FROM wallets WHERE user_id = ${userId} FOR UPDATE`);
+      
+      // Check rate limit within transaction (atomic read after lock)
+      const fifteenMinutesAgo = new Date(Date.now() - RATE_WINDOW_MS);
+      const recentDeposits = await tx
+        .select()
+        .from(walletTransactions)
+        .where(
+          and(
+            eq(walletTransactions.userId, userId),
+            eq(walletTransactions.type, "deposit"),
+            sql`${walletTransactions.createdAt} > ${fifteenMinutesAgo}`
+          )
+        );
+      
+      if (recentDeposits.length >= RATE_LIMIT) {
+        return { transaction: null, hasPending: false, rateLimited: true, dailyLimitExceeded: false };
+      }
+      
+      // Check for pending deposits within transaction (atomic read after lock)
+      const fiveMinutesAgo = new Date(Date.now() - PENDING_TIMEOUT_MS);
+      const pendingDeposits = await tx
+        .select()
+        .from(walletTransactions)
+        .where(
+          and(
+            eq(walletTransactions.userId, userId),
+            eq(walletTransactions.type, "deposit"),
+            eq(walletTransactions.status, "pending"),
+            sql`${walletTransactions.createdAt} > ${fiveMinutesAgo}`
+          )
+        );
+      
+      if (pendingDeposits.length > 0) {
+        return { transaction: null, hasPending: true, rateLimited: false, dailyLimitExceeded: false };
+      }
+      
+      // Check daily limit within same transaction (atomic)
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
+      const todayDeposits = await tx
+        .select()
+        .from(walletTransactions)
+        .where(
+          and(
+            eq(walletTransactions.userId, userId),
+            eq(walletTransactions.type, "deposit"),
+            sql`${walletTransactions.status} IN ('completed', 'pending')`,
+            sql`${walletTransactions.createdAt} > ${todayStart}`
+          )
+        );
+      
+      const todayTotal = todayDeposits.reduce((sum, t) => sum + Number(t.amount), 0);
+      if (todayTotal + amount > DAILY_LIMIT) {
+        return { transaction: null, hasPending: false, rateLimited: false, dailyLimitExceeded: true };
+      }
+      
+      // Create pending transaction atomically (row lock prevents duplicates)
+      const [created] = await tx.insert(walletTransactions).values({
+        walletId,
+        userId,
+        type: "deposit",
+        amount: amount.toString(),
+        currency: "USD",
+        status: "pending",
+        reference,
+        description: `Wallet top-up via ${method}`,
+      }).returning();
+      
+      return { transaction: created, hasPending: false, rateLimited: false, dailyLimitExceeded: false };
+    });
   }
 
   // Marketplace for transporters - show all available loads

@@ -34,9 +34,11 @@ import type { Wallet, WalletTransaction, TransactionStatus, TransactionType } fr
 const topupSchema = z.object({
   amount: z.string().min(1, "Amount is required").refine(val => {
     const num = parseFloat(val);
-    return !isNaN(num) && num >= 1;
-  }, "Amount must be at least $1"),
-  phone: z.string().min(10, "Enter a valid phone number (e.g., 0771234567)"),
+    return !isNaN(num) && num >= 1 && num <= 10000;
+  }, "Amount must be between $1 and $10,000"),
+  phone: z.string()
+    .min(10, "Enter a valid Zimbabwe phone number")
+    .regex(/^(0|263|\+263)?(77|78|71|73)[0-9]{7}$/, "Enter a valid Zimbabwe mobile number (e.g., 0771234567)"),
   method: z.enum(["ecocash", "onemoney"]),
 });
 
@@ -118,9 +120,10 @@ export default function WalletPage() {
       }
     },
     onError: (error: any) => {
+      const errorMessage = error.errors ? error.errors.join(", ") : error.message;
       toast({
         title: "Top-up Failed",
-        description: error.message || "Failed to initiate payment. Please try again.",
+        description: errorMessage || "Failed to initiate payment. Please try again.",
         variant: "destructive",
       });
     },
