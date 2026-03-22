@@ -4,22 +4,22 @@ import * as schema from "@shared/schema";
 
 const { Pool } = pg;
 
-if (!process.env.DATABASE_URL) {
+const isProduction = process.env.NODE_ENV === "production";
+const dbUrl = process.env.DATABASE_URL;
+
+if (!dbUrl) {
   throw new Error(
     "DATABASE_URL must be set. Did you forget to provision a database?",
   );
 }
 
-// In production (DigitalOcean), we often need to allow self-signed certificates for PG connection
-// DigitalOcean DBs require SSL and often use self-signed certificates.
-const isProduction = process.env.NODE_ENV === "production";
-const hasSslRequire = process.env.DATABASE_URL?.includes("sslmode=require");
+const hasSslRequire = dbUrl.includes("sslmode=require");
 console.log(`[DB] Environment: ${process.env.NODE_ENV}, hasSslRequire: ${hasSslRequire}`);
 
 const ssl = (isProduction || hasSslRequire) ? { rejectUnauthorized: false } : undefined;
 
 export const pool = new Pool({ 
-  connectionString: process.env.DATABASE_URL,
+  connectionString: dbUrl,
   ssl: ssl,
   max: 20, // Max connections for the pooler
   idleTimeoutMillis: 30000,
