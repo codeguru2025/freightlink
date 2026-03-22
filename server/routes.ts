@@ -3,6 +3,9 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { setupAuth, registerAuthRoutes, isAuthenticated, hasAcceptedTerms } from "./replit_integrations/auth";
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
+import { s3Client, SPACES_BUCKET } from "./s3";
+import { PutObjectCommand } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { z } from "zod";
 import crypto from "crypto";
 import { 
@@ -108,6 +111,41 @@ export async function registerRoutes(
   
   // Setup object storage routes for file uploads
   registerObjectStorageRoutes(app);
+
+  // DigitalOcean Spaces Presigned URL Uploads
+  app.post("/api/media/upload-url", hasAcceptedTerms, async (req, res) => {
+    try {
+      const { fileName, contentType } = req.body;
+      if (!fileName || !contentType) {
+        return res.status(400).json({ message: "fileName and contentType are required" });
+      }
+
+      const userId = getUserId(req);
+      const key = `uploads/${userId}/${Date.now()}-${fileName}`;
+      
+      const command = new PutObjectCommand({
+        Bucket: SPACES_BUCKET,
+        Key: key,
+        ContentType: contentType,
+        ACL: "public-read", // Or "private" if you want to control access
+      });
+
+      const uploadUrl = await getSignedUrl(s3Client, command, { expiresIn: 3600 });
+      
+      // Construct the public URL (CDN or direct)
+      // If using CDN, replace with your CDN endpoint
+      const publicUrl = `${process.env.DO_SPACES_ENDPOINT}/${SPACES_BUCKET}/${key}`.replace("https://", "https://");
+
+      res.json({
+        uploadUrl,
+        publicUrl,
+        key
+      });
+    } catch (error) {
+      console.error("Error generating presigned URL:", error);
+      res.status(500).json({ message: "Failed to generate upload URL" });
+    }
+  });
 
   // Helper to get user ID from request (supports both Google OAuth and Replit Auth)
   const getUserId = (req: any): string | null => {

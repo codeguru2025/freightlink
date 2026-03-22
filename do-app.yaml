@@ -19,6 +19,10 @@ services:
     scope: RUN_TIME
     type: SECRET
     description: "Use the TRANSACTION POOLER URL (Port 25061) for the web service"
+  - key: DIRECT_DATABASE_URL
+    scope: RUN_TIME
+    type: SECRET
+    description: "Use the DIRECT CONNECTION URL (Port 25060) for migrations"
   - key: SESSION_SECRET
     scope: RUN_TIME
     type: SECRET
@@ -55,6 +59,21 @@ services:
   - key: OBJECT_STORAGE_SECRET_KEY
     scope: RUN_TIME
     type: SECRET
+  - key: DO_SPACES_ENDPOINT
+    scope: RUN_TIME
+    type: SECRET
+  - key: DO_SPACES_KEY
+    scope: RUN_TIME
+    type: SECRET
+  - key: DO_SPACES_SECRET
+    scope: RUN_TIME
+    type: SECRET
+  - key: DO_SPACES_BUCKET
+    scope: RUN_TIME
+    type: SECRET
+  - key: DO_SPACES_REGION
+    scope: RUN_TIME
+    type: SECRET
 
 jobs:
 - name: db-migrate
@@ -68,7 +87,7 @@ jobs:
   - key: DATABASE_URL
     scope: RUN_TIME
     type: SECRET
-    description: "Use the DIRECT CONNECTION URL (Port 25060) for migrations"
+    from_secret: DIRECT_DATABASE_URL
   - key: NODE_ENV
     value: production
 
