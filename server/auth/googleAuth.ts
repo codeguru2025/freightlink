@@ -120,24 +120,33 @@ export async function setupAuth(app: Express) {
 
   // Callback route - handles Google response
   app.get("/api/callback", (req, res, next) => {
-    console.log("OAuth Callback received. Query:", req.query);
+    console.log(`[AUTH] Callback received from ${req.get('host')}`);
     passport.authenticate("google", (err: any, user: any, info: any) => {
       if (err) {
-        console.error("Passport authenticate error:", err);
+        console.error("[AUTH] Passport authenticate error:", err);
         return res.redirect("/");
       }
       if (!user) {
-        console.error("No user returned from Google:", info);
+        console.error("[AUTH] No user returned from Google:", info);
         return res.redirect("/");
       }
-      console.log("Passport authenticated user, logging in...");
+      
+      console.log(`[AUTH] Authenticated user ${user.id}, initiating session...`);
       req.logIn(user, (loginErr) => {
         if (loginErr) {
-          console.error("Passport login session error:", loginErr);
+          console.error("[AUTH] req.logIn error:", loginErr);
           return res.redirect("/");
         }
-        console.log("Session saved. Login successful!");
-        return res.redirect("/");
+        
+        // Explicitly save session before redirecting to ensure cookie is set
+        req.session.save((saveErr) => {
+          if (saveErr) {
+            console.error("[AUTH] session.save error:", saveErr);
+            return res.redirect("/");
+          }
+          console.log("[AUTH] Session saved. Redirecting to app...");
+          return res.redirect("/");
+        });
       });
     })(req, res, next);
   });
