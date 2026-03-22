@@ -10,18 +10,24 @@ services:
   http_port: 5000
   health_check:
     http_path: /health
-  build_command: npm install && npm run build
+  build_command: npm install && npm run build && npx drizzle-kit push --force
   run_command: npm run start
   envs:
+  - key: DATABASE_URL
+    scope: RUN_TIME
+    type: SECRET
+    from_secret: DIRECT_DATABASE_URL
   - key: NODE_ENV
     value: production
   - key: APP_URL
     scope: RUN_TIME
     value: https://freightlink-i8hsp.ondigitalocean.app
-  # DB and Auth secrets are component-specific or globally inherited
-  - key: DATABASE_URL
+  # Runtime Pooler Connection
+  - key: POOL_DATABASE_URL
     scope: RUN_TIME
     type: SECRET
+    from_secret: DATABASE_URL
+  # DB and Auth secrets are component-specific or globally inherited
   - key: DIRECT_DATABASE_URL
     scope: RUN_TIME
     type: SECRET
