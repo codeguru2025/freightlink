@@ -53,6 +53,19 @@ services:
     scope: RUN_TIME
     type: SECRET
 
+jobs:
+- name: db-migrate
+  kind: PRE_DEPLOY
+  github:
+    branch: main
+    repo: codeguru2025/freightlink
+  build_command: npm install
+  run_command: npm run db:push
+  envs:
+  - key: DATABASE_URL
+    scope: RUN_TIME
+    type: SECRET
+
 databases:
 - name: freightlink-db
   engine: PG
