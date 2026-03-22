@@ -1,0 +1,61 @@
+name: freightlink-zw
+region: nyc
+services:
+- name: web
+  github:
+    branch: main
+    repo: [YOUR_GITHUB_USER]/Freight-Link-Zw
+  instance_count: 1
+  instance_size_slug: basic-xxs
+  http_port: 5000
+  build_command: npm install && npm run build
+  run_command: npm run start
+  envs:
+  - key: NODE_ENV
+    value: production
+  - key: DATABASE_URL
+    scope: RUN_TIME
+    type: SECRET
+  - key: SESSION_SECRET
+    scope: RUN_TIME
+    type: SECRET
+  - key: GOOGLE_CLIENT_ID
+    scope: RUN_TIME
+    type: SECRET
+  - key: GOOGLE_CLIENT_SECRET
+    scope: RUN_TIME
+    type: SECRET
+  - key: ADMIN_USERNAME
+    scope: RUN_TIME
+    type: SECRET
+  - key: ADMIN_PASSWORD
+    scope: RUN_TIME
+    type: SECRET
+  - key: PAYNOW_INTEGRATION_ID
+    scope: RUN_TIME
+    type: SECRET
+  - key: PAYNOW_INTEGRATION_KEY
+    scope: RUN_TIME
+    type: SECRET
+  - key: OBJECT_STORAGE_ENDPOINT
+    scope: RUN_TIME
+    type: SECRET
+  - key: OBJECT_STORAGE_REGION
+    scope: RUN_TIME
+    type: SECRET
+  - key: OBJECT_STORAGE_BUCKET
+    scope: RUN_TIME
+    type: SECRET
+  - key: OBJECT_STORAGE_ACCESS_KEY
+    scope: RUN_TIME
+    type: SECRET
+  - key: OBJECT_STORAGE_SECRET_KEY
+    scope: RUN_TIME
+    type: SECRET
+
+databases:
+- name: freightlink-db
+  engine: PG
+  version: "16"
+  size_slug: db-s-dev-database
+  num_nodes: 1

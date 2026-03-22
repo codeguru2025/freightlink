@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { setupAuth, registerAuthRoutes, isAuthenticated } from "./replit_integrations/auth";
+import { setupAuth, registerAuthRoutes, isAuthenticated, hasAcceptedTerms } from "./replit_integrations/auth";
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
 import { z } from "zod";
 import crypto from "crypto";
@@ -110,7 +110,7 @@ export async function registerRoutes(
   };
 
   // Profile routes
-  app.get("/api/profile", isAuthenticated, async (req, res) => {
+  app.get("/api/profile", hasAcceptedTerms, async (req, res) => {
     try {
       const userId = getUserId(req);
       if (!userId) {
@@ -129,7 +129,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/profile", isAuthenticated, async (req, res) => {
+  app.post("/api/profile", hasAcceptedTerms, async (req, res) => {
     try {
       const userId = getUserId(req);
       if (!userId) {
@@ -164,7 +164,7 @@ export async function registerRoutes(
   });
 
   // Update profile
-  app.patch("/api/profile", isAuthenticated, async (req, res) => {
+  app.patch("/api/profile", hasAcceptedTerms, async (req, res) => {
     try {
       const userId = getUserId(req);
       if (!userId) {
@@ -197,7 +197,7 @@ export async function registerRoutes(
   });
 
   // Stats route
-  app.get("/api/stats", isAuthenticated, async (req, res) => {
+  app.get("/api/stats", hasAcceptedTerms, async (req, res) => {
     try {
       const userId = getUserId(req);
       if (!userId) {
@@ -218,7 +218,7 @@ export async function registerRoutes(
   });
 
   // Loads routes
-  app.get("/api/loads", isAuthenticated, async (req, res) => {
+  app.get("/api/loads", hasAcceptedTerms, async (req, res) => {
     try {
       const userId = getUserId(req);
       if (!userId) {
@@ -241,7 +241,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/loads/recent", isAuthenticated, async (req, res) => {
+  app.get("/api/loads/recent", hasAcceptedTerms, async (req, res) => {
     try {
       const userId = getUserId(req);
       if (!userId) {
@@ -256,7 +256,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/marketplace", isAuthenticated, async (req, res) => {
+  app.get("/api/marketplace", hasAcceptedTerms, async (req, res) => {
     try {
       const userId = getUserId(req);
       if (!userId) return res.status(401).json({ message: "Unauthorized" });
@@ -287,7 +287,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/loads/:id", isAuthenticated, async (req, res) => {
+  app.get("/api/loads/:id", hasAcceptedTerms, async (req, res) => {
     try {
       const userId = getUserId(req);
       if (!userId) {
@@ -320,7 +320,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/loads", isAuthenticated, async (req, res) => {
+  app.post("/api/loads", hasAcceptedTerms, async (req, res) => {
     try {
       const userId = getUserId(req);
       if (!userId) {
@@ -389,7 +389,7 @@ export async function registerRoutes(
   });
 
   // Bids routes
-  app.get("/api/bids", isAuthenticated, async (req, res) => {
+  app.get("/api/bids", hasAcceptedTerms, async (req, res) => {
     try {
       const userId = getUserId(req);
       if (!userId) {
@@ -404,7 +404,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/loads/:loadId/bids", isAuthenticated, async (req, res) => {
+  app.post("/api/loads/:loadId/bids", hasAcceptedTerms, async (req, res) => {
     try {
       const userId = getUserId(req);
       if (!userId) {
@@ -491,7 +491,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/bids/:id/accept", isAuthenticated, async (req, res) => {
+  app.post("/api/bids/:id/accept", hasAcceptedTerms, async (req, res) => {
     try {
       const userId = getUserId(req);
       if (!userId) {
@@ -544,7 +544,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/bids/:id/reject", isAuthenticated, async (req, res) => {
+  app.post("/api/bids/:id/reject", hasAcceptedTerms, async (req, res) => {
     try {
       const userId = getUserId(req);
       if (!userId) {
@@ -582,7 +582,7 @@ export async function registerRoutes(
   });
 
   // Jobs routes
-  app.get("/api/jobs", isAuthenticated, async (req, res) => {
+  app.get("/api/jobs", hasAcceptedTerms, async (req, res) => {
     try {
       const userId = getUserId(req);
       if (!userId) {
@@ -602,7 +602,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/jobs/active", isAuthenticated, async (req, res) => {
+  app.get("/api/jobs/active", hasAcceptedTerms, async (req, res) => {
     try {
       const userId = getUserId(req);
       if (!userId) {
@@ -623,7 +623,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/jobs/:id", isAuthenticated, async (req, res) => {
+  app.get("/api/jobs/:id", hasAcceptedTerms, async (req, res) => {
     try {
       const { id } = req.params;
       const job = await storage.getJob(id);
@@ -639,7 +639,7 @@ export async function registerRoutes(
     }
   });
 
-  app.patch("/api/jobs/:id/status", isAuthenticated, async (req, res) => {
+  app.patch("/api/jobs/:id/status", hasAcceptedTerms, async (req, res) => {
     try {
       const userId = getUserId(req);
       if (!userId) {
@@ -678,7 +678,7 @@ export async function registerRoutes(
   });
 
   // POD (Proof of Delivery) routes
-  app.get("/api/jobs/:id/pod-documents", isAuthenticated, async (req, res) => {
+  app.get("/api/jobs/:id/pod-documents", hasAcceptedTerms, async (req, res) => {
     try {
       const userId = getUserId(req);
       if (!userId) {
@@ -706,7 +706,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/jobs/:id/submit-pod", isAuthenticated, async (req, res) => {
+  app.post("/api/jobs/:id/submit-pod", hasAcceptedTerms, async (req, res) => {
     try {
       const userId = getUserId(req);
       if (!userId) {
@@ -740,7 +740,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/jobs/:id/confirm-pod", isAuthenticated, async (req, res) => {
+  app.post("/api/jobs/:id/confirm-pod", hasAcceptedTerms, async (req, res) => {
     try {
       const userId = getUserId(req);
       if (!userId) {
@@ -771,7 +771,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/jobs/:id/request-payment", isAuthenticated, async (req, res) => {
+  app.post("/api/jobs/:id/request-payment", hasAcceptedTerms, async (req, res) => {
     try {
       const userId = getUserId(req);
       if (!userId) {
@@ -802,7 +802,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/jobs/:id/mark-paid", isAuthenticated, async (req, res) => {
+  app.post("/api/jobs/:id/mark-paid", hasAcceptedTerms, async (req, res) => {
     try {
       const userId = getUserId(req);
       if (!userId) {
@@ -840,7 +840,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/pod-jobs", isAuthenticated, async (req, res) => {
+  app.get("/api/pod-jobs", hasAcceptedTerms, async (req, res) => {
     try {
       const userId = getUserId(req);
       if (!userId) {
@@ -870,7 +870,7 @@ export async function registerRoutes(
   });
 
   // Trucks routes
-  app.get("/api/trucks", isAuthenticated, async (req, res) => {
+  app.get("/api/trucks", hasAcceptedTerms, async (req, res) => {
     try {
       const userId = getUserId(req);
       if (!userId) {
@@ -885,7 +885,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/trucks", isAuthenticated, async (req, res) => {
+  app.post("/api/trucks", hasAcceptedTerms, async (req, res) => {
     try {
       const userId = getUserId(req);
       if (!userId) {
@@ -919,7 +919,7 @@ export async function registerRoutes(
     }
   });
 
-  app.patch("/api/trucks/:id", isAuthenticated, async (req, res) => {
+  app.patch("/api/trucks/:id", hasAcceptedTerms, async (req, res) => {
     try {
       const userId = getUserId(req);
       if (!userId) {
@@ -964,7 +964,7 @@ export async function registerRoutes(
     next();
   };
 
-  app.get("/api/admin/users", isAuthenticated, requireAdmin, async (req, res) => {
+  app.get("/api/admin/users", hasAcceptedTerms, requireAdmin, async (req, res) => {
     try {
       const users = await storage.getAllUsers();
       res.json(users);
@@ -974,7 +974,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/admin/loads", isAuthenticated, requireAdmin, async (req, res) => {
+  app.get("/api/admin/loads", hasAcceptedTerms, requireAdmin, async (req, res) => {
     try {
       const allLoads = await storage.getAllLoads();
       res.json(allLoads);
@@ -984,7 +984,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/admin/jobs", isAuthenticated, requireAdmin, async (req, res) => {
+  app.get("/api/admin/jobs", hasAcceptedTerms, requireAdmin, async (req, res) => {
     try {
       const allJobs = await storage.getAllJobs();
       res.json(allJobs);
@@ -994,7 +994,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/admin/reports", isAuthenticated, requireAdmin, async (req, res) => {
+  app.get("/api/admin/reports", hasAcceptedTerms, requireAdmin, async (req, res) => {
     try {
       const reports = await storage.getAdminReports();
       res.json(reports);
@@ -1004,7 +1004,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/admin/transactions", isAuthenticated, requireAdmin, async (req, res) => {
+  app.get("/api/admin/transactions", hasAcceptedTerms, requireAdmin, async (req, res) => {
     try {
       const allTransactions = await storage.getAllWalletTransactions();
       res.json(allTransactions);
@@ -1015,7 +1015,7 @@ export async function registerRoutes(
   });
 
   // Documents routes
-  app.get("/api/documents", isAuthenticated, async (req, res) => {
+  app.get("/api/documents", hasAcceptedTerms, async (req, res) => {
     try {
       const userId = getUserId(req);
       if (!userId) return res.status(401).json({ message: "Unauthorized" });
@@ -1027,7 +1027,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/jobs/:jobId/documents", isAuthenticated, async (req, res) => {
+  app.get("/api/jobs/:jobId/documents", hasAcceptedTerms, async (req, res) => {
     try {
       const docs = await storage.getDocumentsByJob(req.params.jobId);
       res.json(docs);
@@ -1037,7 +1037,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/documents", isAuthenticated, async (req, res) => {
+  app.post("/api/documents", hasAcceptedTerms, async (req, res) => {
     try {
       const userId = getUserId(req);
       if (!userId) return res.status(401).json({ message: "Unauthorized" });
@@ -1055,7 +1055,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/admin/documents/pending", isAuthenticated, requireAdmin, async (req, res) => {
+  app.get("/api/admin/documents/pending", hasAcceptedTerms, requireAdmin, async (req, res) => {
     try {
       const docs = await storage.getAllPendingDocuments();
       res.json(docs);
@@ -1065,7 +1065,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/admin/documents/all", isAuthenticated, requireAdmin, async (req, res) => {
+  app.get("/api/admin/documents/all", hasAcceptedTerms, requireAdmin, async (req, res) => {
     try {
       const docs = await storage.getAllDocuments();
       res.json(docs);
@@ -1075,7 +1075,7 @@ export async function registerRoutes(
     }
   });
 
-  app.patch("/api/admin/documents/:id/verify", isAuthenticated, requireAdmin, async (req, res) => {
+  app.patch("/api/admin/documents/:id/verify", hasAcceptedTerms, requireAdmin, async (req, res) => {
     try {
       const userId = getUserId(req);
       
@@ -1094,7 +1094,7 @@ export async function registerRoutes(
   });
 
   // Messages routes
-  app.get("/api/messages/conversations", isAuthenticated, async (req, res) => {
+  app.get("/api/messages/conversations", hasAcceptedTerms, async (req, res) => {
     try {
       const userId = getUserId(req);
       if (!userId) return res.status(401).json({ message: "Unauthorized" });
@@ -1106,7 +1106,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/messages/:partnerId", isAuthenticated, async (req, res) => {
+  app.get("/api/messages/:partnerId", hasAcceptedTerms, async (req, res) => {
     try {
       const userId = getUserId(req);
       if (!userId) return res.status(401).json({ message: "Unauthorized" });
@@ -1119,7 +1119,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/messages", isAuthenticated, async (req, res) => {
+  app.post("/api/messages", hasAcceptedTerms, async (req, res) => {
     try {
       const userId = getUserId(req);
       if (!userId) return res.status(401).json({ message: "Unauthorized" });
@@ -1138,7 +1138,7 @@ export async function registerRoutes(
   });
 
   // Reviews routes
-  app.get("/api/users/:userId/reviews", isAuthenticated, async (req, res) => {
+  app.get("/api/users/:userId/reviews", hasAcceptedTerms, async (req, res) => {
     try {
       const reviews = await storage.getReviewsForUser(req.params.userId);
       res.json(reviews);
@@ -1148,7 +1148,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/users/:userId/rating", isAuthenticated, async (req, res) => {
+  app.get("/api/users/:userId/rating", hasAcceptedTerms, async (req, res) => {
     try {
       const rating = await storage.getUserRating(req.params.userId);
       res.json(rating);
@@ -1158,7 +1158,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/jobs/:jobId/reviews", isAuthenticated, async (req, res) => {
+  app.get("/api/jobs/:jobId/reviews", hasAcceptedTerms, async (req, res) => {
     try {
       const reviews = await storage.getReviewsByJob(req.params.jobId);
       res.json(reviews);
@@ -1168,7 +1168,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/jobs/:jobId/reviews", isAuthenticated, async (req, res) => {
+  app.post("/api/jobs/:jobId/reviews", hasAcceptedTerms, async (req, res) => {
     try {
       const userId = getUserId(req);
       if (!userId) return res.status(401).json({ message: "Unauthorized" });
@@ -1194,7 +1194,7 @@ export async function registerRoutes(
   });
 
   // Disputes routes
-  app.get("/api/disputes", isAuthenticated, async (req, res) => {
+  app.get("/api/disputes", hasAcceptedTerms, async (req, res) => {
     try {
       const userId = getUserId(req);
       if (!userId) return res.status(401).json({ message: "Unauthorized" });
@@ -1209,7 +1209,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/disputes/:id", isAuthenticated, async (req, res) => {
+  app.get("/api/disputes/:id", hasAcceptedTerms, async (req, res) => {
     try {
       const dispute = await storage.getDispute(req.params.id);
       if (!dispute) return res.status(404).json({ message: "Dispute not found" });
@@ -1220,7 +1220,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/disputes", isAuthenticated, async (req, res) => {
+  app.post("/api/disputes", hasAcceptedTerms, async (req, res) => {
     try {
       const userId = getUserId(req);
       if (!userId) return res.status(401).json({ message: "Unauthorized" });
@@ -1238,7 +1238,7 @@ export async function registerRoutes(
     }
   });
 
-  app.patch("/api/admin/disputes/:id", isAuthenticated, requireAdmin, async (req, res) => {
+  app.patch("/api/admin/disputes/:id", hasAcceptedTerms, requireAdmin, async (req, res) => {
     try {
       const userId = getUserId(req);
       
@@ -1259,7 +1259,7 @@ export async function registerRoutes(
   // ============ WALLET ROUTES ============
 
   // Get wallet balance and info
-  app.get("/api/wallet", isAuthenticated, async (req, res) => {
+  app.get("/api/wallet", hasAcceptedTerms, async (req, res) => {
     try {
       const userId = getUserId(req);
       if (!userId) return res.status(401).json({ message: "Unauthorized" });
@@ -1278,7 +1278,7 @@ export async function registerRoutes(
   });
 
   // Get wallet transactions
-  app.get("/api/wallet/transactions", isAuthenticated, async (req, res) => {
+  app.get("/api/wallet/transactions", hasAcceptedTerms, async (req, res) => {
     try {
       const userId = getUserId(req);
       if (!userId) return res.status(401).json({ message: "Unauthorized" });
@@ -1319,7 +1319,7 @@ export async function registerRoutes(
   }
 
   // Initiate wallet top-up via Paynow/EcoCash with enhanced security
-  app.post("/api/wallet/topup", isAuthenticated, async (req, res) => {
+  app.post("/api/wallet/topup", hasAcceptedTerms, async (req, res) => {
     const userId = getUserId(req);
     if (!userId) return res.status(401).json({ message: "Unauthorized" });
 
@@ -1607,7 +1607,7 @@ export async function registerRoutes(
   });
 
   // Check payment status (poll transaction)
-  app.get("/api/wallet/transactions/:id/status", isAuthenticated, async (req, res) => {
+  app.get("/api/wallet/transactions/:id/status", hasAcceptedTerms, async (req, res) => {
     try {
       const userId = getUserId(req);
       if (!userId) return res.status(401).json({ message: "Unauthorized" });

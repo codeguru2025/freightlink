@@ -210,3 +210,20 @@ export const isAuthenticated: RequestHandler = (req, res, next) => {
   }
   return res.status(401).json({ message: "Unauthorized" });
 };
+
+export const hasAcceptedTerms: RequestHandler = (req: any, res, next) => {
+  if (!req.isAuthenticated()) {
+    return res.status(401).json({ message: "Unauthorized" });
+  }
+  
+  // Allow admin user and the accept-terms route
+  if (req.user?.id === "admin-system-user" || req.path === "/api/auth/accept-terms" || req.path === "/api/auth/user") {
+    return next();
+  }
+  
+  if (req.user?.termsAccepted) {
+    return next();
+  }
+  
+  return res.status(403).json({ message: "Terms and conditions must be accepted" });
+};

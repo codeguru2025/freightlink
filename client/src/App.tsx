@@ -10,6 +10,7 @@ import { useQuery } from "@tanstack/react-query";
 
 import LandingPage from "@/pages/landing";
 import RoleSelectionPage from "@/pages/role-selection";
+import TermsAcceptancePage from "@/pages/terms-acceptance";
 import DashboardPage from "@/pages/dashboard";
 import LoadsPage from "@/pages/loads/index";
 import NewLoadPage from "@/pages/loads/new";
@@ -71,6 +72,10 @@ function AuthenticatedRoutes() {
 
   if (!user) {
     return <LandingPage />;
+  }
+
+  if (!user.termsAccepted && user.id !== "admin-system-user") {
+    return <TermsAcceptancePage />;
   }
 
   if (!profile) {
