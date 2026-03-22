@@ -55,74 +55,72 @@ export async function setupAuth(app: Express) {
   app.use(passport.initialize());
   app.use(passport.session());
 
-  // We'll set up strategies dynamically per hostname
-  const registeredStrategies = new Set<string>();
+  const baseUrl = process.env.APP_URL || "http://localhost:5000";
+  const callbackURL = `${baseUrl}/api/callback`;
 
-  const ensureStrategy = (hostname: string) => {
-    const strategyName = `google:${hostname}`;
-    if (!registeredStrategies.has(strategyName)) {
-      const callbackURL = `https://${hostname}/api/callback`;
-      
-      passport.use(
-        strategyName,
-        new GoogleStrategy(
-          {
-            clientID: process.env.GOOGLE_CLIENT_ID!,
-            clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
-            callbackURL,
-            scope: ["profile", "email"],
-          },
-          async (accessToken, refreshToken, profile, done) => {
-            try {
-              const user = await upsertUser(profile);
-              done(null, {
-                ...user,
-                accessToken,
-                refreshToken,
-              });
-            } catch (error) {
-              done(error as Error);
-            }
-          }
-        )
-      );
-      registeredStrategies.add(strategyName);
-    }
-    return strategyName;
-  };
+  passport.use(
+    new GoogleStrategy(
+      {
+        clientID: process.env.GOOGLE_CLIENT_ID!,
+        clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+        callbackURL,
+        scope: ["profile", "email"],
+      },
+      async (accessToken, refreshToken, profile, done) => {
+        try {
+          const user = await upsertUser(profile);
+          done(null, {
+            ...user,
+            accessToken,
+            refreshToken,
+          });
+        } catch (error) {
+          console.error("Error in Google Strategy verify callback:", error);
+          done(error as Error);
+        }
+      }
+    )
+  );
 
   passport.serializeUser((user: any, done) => {
-    done(null, user);
+    // Just store the user ID in the session
+    done(null, user.id);
   });
 
-  passport.deserializeUser((user: any, done) => {
-    done(null, user);
+  passport.deserializeUser(async (id: string, done) => {
+    try {
+      const user = await authStorage.getUser(id);
+      if (user) {
+        done(null, user);
+      } else {
+        done(null, false);
+      }
+    } catch (error) {
+      console.error("Error deserializing user:", error);
+      done(error);
+    }
   });
 
   // Login route - redirects to Google
-  app.get("/api/login", (req, res, next) => {
-    const strategyName = ensureStrategy(req.hostname);
-    passport.authenticate(strategyName, {
-      scope: ["profile", "email"],
-    })(req, res, next);
-  });
+  app.get("/api/login", passport.authenticate("google", {
+    scope: ["profile", "email"],
+  }));
 
   // Callback route - handles Google response
   app.get("/api/callback", (req, res, next) => {
-    const strategyName = ensureStrategy(req.hostname);
-    passport.authenticate(strategyName, (err: any, user: any, info: any) => {
+    passport.authenticate("google", (err: any, user: any, info: any) => {
       if (err) {
-        console.error("OAuth callback error:", err);
-        return res.redirect("/api/login");
+        console.error("OAuth callback authentication error:", err);
+        return res.redirect("/");
       }
       if (!user) {
-        console.error("OAuth callback - no user:", info);
-        return res.redirect("/api/login");
+        console.error("OAuth callback - no user found:", info);
+        return res.redirect("/");
       }
       req.logIn(user, (loginErr) => {
         if (loginErr) {
-          console.error("Login error:", loginErr);
-          return res.redirect("/api/login");
+          console.error("Passport req.logIn error:", loginErr);
+          return res.redirect("/");
         }
         console.log("OAuth login successful for user:", user.id || user.email);
         return res.redirect("/");
