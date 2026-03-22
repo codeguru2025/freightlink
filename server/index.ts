@@ -20,15 +20,29 @@ const dbUrl = process.env.DATABASE_URL || "";
 const maskedDbUrl = dbUrl.replace(/:([^@]+)@/, ":****@");
 console.log(`[DB] Connecting to: ${maskedDbUrl}`);
 
-// Check for required tables at startup
+// Check for required tables at startup and bootstrap if missing
 import { sql } from "drizzle-orm";
 import { db } from "./db";
 (async () => {
   try {
+    console.log("[DB] Startup check: verifying 'users' table...");
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS "users" (
+        "id" SERIAL PRIMARY KEY,
+        "username" TEXT NOT NULL UNIQUE,
+        "password" TEXT,
+        "google_id" TEXT,
+        "email" TEXT NOT NULL UNIQUE,
+        "avatar_url" TEXT,
+        "role" TEXT NOT NULL DEFAULT 'user',
+        "is_admin" BOOLEAN NOT NULL DEFAULT false,
+        "terms_accepted" BOOLEAN NOT NULL DEFAULT false
+      );
+    `);
     const result = await db.execute(sql`SELECT count(*) FROM users`);
-    console.log(`[DB] Startup check: 'users' table exists and contains ${result.rows[0].count} users.`);
+    console.log(`[DB] Startup check: 'users' table is ready and contains ${result.rows[0].count} users.`);
   } catch (e: any) {
-    console.warn(`[DB] Startup check WARNING: 'users' table might be missing: ${e.message}`);
+    console.error(`[DB] Startup check ERROR: Failed to bootstrap database: ${e.message}`);
   }
 })();
 
