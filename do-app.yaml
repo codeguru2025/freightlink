@@ -8,6 +8,8 @@ services:
   instance_count: 1
   instance_size_slug: basic-xxs
   http_port: 5000
+  health_check:
+    http_path: /health
   build_command: npm install && npm run build
   run_command: npm run start
   envs:

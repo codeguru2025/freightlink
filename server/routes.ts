@@ -97,6 +97,11 @@ export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
+  // Health check endpoint for DigitalOcean
+  app.get("/health", (_req, res) => {
+    res.status(200).send("OK");
+  });
+
   // Setup authentication
   await setupAuth(app);
   registerAuthRoutes(app);
