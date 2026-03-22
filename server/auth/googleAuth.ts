@@ -63,16 +63,20 @@ export async function setupAuth(app: Express) {
   app.use(passport.initialize());
   app.use(passport.session());
 
-  const baseUrl = process.env.APP_URL || "http://localhost:5000";
-  const callbackURL = `${baseUrl}/api/callback`;
+  // Use a dynamic callback URL based on the request host
+  const getCallbackURL = (req: any) => {
+    const protocol = req.protocol === 'http' && req.get('x-forwarded-proto') === 'https' ? 'https' : req.protocol;
+    const host = req.get('host');
+    return `${protocol}://${host}/api/callback`;
+  };
 
   passport.use(
     new GoogleStrategy(
       {
         clientID: process.env.GOOGLE_CLIENT_ID!,
         clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
-        callbackURL,
-        scope: ["profile", "email"],
+        callbackURL: "/api/callback", // Relative path allows Passport to handle the host dynamically
+        proxy: true,
       },
       async (accessToken, refreshToken, profile, done) => {
         try {
