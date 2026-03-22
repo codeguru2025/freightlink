@@ -11,20 +11,27 @@ export function getSession() {
   const sessionTtl = 7 * 24 * 60 * 60 * 1000; // 1 week
   const pgStore = connectPg(session);
   const sessionStore = new pgStore({
-    pool: pool, // Use the existing pool with SSL settings
-    createTableIfMissing: false,
+    pool: pool,
+    createTableIfMissing: true, // Automatically create the session table if it's missing locally
     ttl: sessionTtl,
     tableName: "sessions",
   });
+
+  sessionStore.on('error', (error) => {
+    console.error("Session Store Error:", error);
+  });
+
   return session({
     secret: process.env.SESSION_SECRET!,
     store: sessionStore,
     resave: false,
     saveUninitialized: false,
+    name: "freightlink.sid", // Explicit cookie name
     cookie: {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       maxAge: sessionTtl,
+      sameSite: "lax",
     },
   });
 }
@@ -109,21 +116,23 @@ export async function setupAuth(app: Express) {
 
   // Callback route - handles Google response
   app.get("/api/callback", (req, res, next) => {
+    console.log("OAuth Callback received. Query:", req.query);
     passport.authenticate("google", (err: any, user: any, info: any) => {
       if (err) {
-        console.error("OAuth callback authentication error:", err);
+        console.error("Passport authenticate error:", err);
         return res.redirect("/");
       }
       if (!user) {
-        console.error("OAuth callback - no user found:", info);
+        console.error("No user returned from Google:", info);
         return res.redirect("/");
       }
+      console.log("Passport authenticated user, logging in...");
       req.logIn(user, (loginErr) => {
         if (loginErr) {
-          console.error("Passport req.logIn error:", loginErr);
+          console.error("Passport login session error:", loginErr);
           return res.redirect("/");
         }
-        console.log("OAuth login successful for user:", user.id || user.email);
+        console.log("Session saved. Login successful!");
         return res.redirect("/");
       });
     })(req, res, next);
