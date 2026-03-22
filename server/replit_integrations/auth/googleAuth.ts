@@ -34,7 +34,7 @@ async function upsertUser(profile: Profile) {
   const lastName = profile.name?.familyName || profile.displayName?.split(" ").slice(1).join(" ") || "";
   const profileImageUrl = profile.photos?.[0]?.value || "";
 
-  await authStorage.upsertUser({
+  const user = await authStorage.upsertUser({
     id: profile.id,
     email,
     firstName,
@@ -42,13 +42,7 @@ async function upsertUser(profile: Profile) {
     profileImageUrl,
   });
 
-  return {
-    id: profile.id,
-    email,
-    firstName,
-    lastName,
-    profileImageUrl,
-  };
+  return user;
 }
 
 export async function setupAuth(app: Express) {
