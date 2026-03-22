@@ -23,28 +23,64 @@ console.log(`[DB] Connecting to: ${maskedDbUrl}`);
 // Check for required tables at startup and bootstrap if missing
 import { sql } from "drizzle-orm";
 import { db } from "./db";
-(async () => {
+
+async function bootstrapDatabase() {
   try {
-    console.log("[DB] Startup check: verifying 'users' table...");
+    console.log("[DB] Startup check: verifying database tables...");
+    
+    // Ensure pgcrypto extension is available for gen_random_uuid()
+    await db.execute(sql`CREATE EXTENSION IF NOT EXISTS "pgcrypto"`);
+
+    // If the table exists but has wrong columns, we might need to recreate it
+    // For this deployment, we'll ensure the correct schema exists.
+    try {
+      await db.execute(sql`SELECT first_name FROM users LIMIT 1`);
+    } catch (err) {
+      console.log("[DB] 'users' table is missing columns, recreating...");
+      await db.execute(sql`DROP TABLE IF EXISTS "users" CASCADE`);
+    }
+
     await db.execute(sql`
       CREATE TABLE IF NOT EXISTS "users" (
-        "id" SERIAL PRIMARY KEY,
-        "username" TEXT NOT NULL UNIQUE,
-        "password" TEXT,
-        "google_id" TEXT,
-        "email" TEXT NOT NULL UNIQUE,
-        "avatar_url" TEXT,
-        "role" TEXT NOT NULL DEFAULT 'user',
-        "is_admin" BOOLEAN NOT NULL DEFAULT false,
-        "terms_accepted" BOOLEAN NOT NULL DEFAULT false
+        "id" varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+        "email" varchar UNIQUE,
+        "first_name" varchar,
+        "last_name" varchar,
+        "profile_image_url" varchar,
+        "terms_accepted" boolean DEFAULT false,
+        "terms_accepted_at" timestamp,
+        "created_at" timestamp DEFAULT now(),
+        "updated_at" timestamp DEFAULT now()
       );
     `);
+    
+    // Ensure sessions table is correct
+    try {
+      await db.execute(sql`SELECT sess FROM sessions LIMIT 1`);
+    } catch (err) {
+      console.log("[DB] 'sessions' table is incorrect, recreating...");
+      await db.execute(sql`DROP TABLE IF EXISTS "sessions" CASCADE`);
+    }
+
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS "sessions" (
+        "sid" varchar PRIMARY KEY,
+        "sess" jsonb NOT NULL,
+        "expire" timestamp NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS "IDX_session_expire" ON "sessions" ("expire");
+    `);
+
     const result = await db.execute(sql`SELECT count(*) FROM users`);
-    console.log(`[DB] Startup check: 'users' table is ready and contains ${result.rows[0].count} users.`);
+    console.log(`[DB] Startup check: Database is ready. 'users' table contains ${result.rows[0].count} users.`);
   } catch (e: any) {
     console.error(`[DB] Startup check ERROR: Failed to bootstrap database: ${e.message}`);
+    if (e.detail) console.error(`[DB] Error Detail: ${e.detail}`);
+    if (e.hint) console.error(`[DB] Error Hint: ${e.hint}`);
   }
-})();
+}
+
+bootstrapDatabase();
 
 // Satisfy Express view engine requirement if it ever tries to render a view (prevents startup crash)
 app.set("view engine", "html");
