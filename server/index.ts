@@ -5,6 +5,12 @@ import { createServer } from "http";
 import { getSession } from "./auth/googleAuth";
 import passport from "passport";
 
+// In DigitalOcean, internal requests between services or to the DB 
+// often use self-signed certificates. We need to tell Node to allow them.
+if (process.env.NODE_ENV === "production") {
+  process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
+}
+
 const app = express();
 // Trust proxy settings MUST be set before ANY session/auth middleware
 app.set("trust proxy", 1); 
