@@ -4,7 +4,7 @@ services:
 - name: web
   github:
     branch: main
-    repo: [YOUR_GITHUB_USER]/Freight-Link-Zw
+    repo: codeguru2025/freightlink
   instance_count: 1
   instance_size_slug: basic-xxs
   http_port: 5000
