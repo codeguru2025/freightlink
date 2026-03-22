@@ -6,10 +6,5 @@ client/dist
 .local
 .replit
 replit.md
-attached_assets/
-*.png
-*.jpg
-*.jpeg
-*.gif
 .env
 .replit.json
