@@ -5,16 +5,29 @@ import { isAuthenticated } from "./googleAuth";
 // Register auth-specific routes
 export function registerAuthRoutes(app: Express): void {
   // Get current authenticated user (supports both Google OAuth and Replit Auth)
-  app.get("/api/auth/user", isAuthenticated, async (req: any, res) => {
+  app.get("/api/auth/user", async (req: any, res) => {
     try {
+      console.log(`[AUTH] Fetching user. Authenticated: ${req.isAuthenticated()}, SessionID: ${req.sessionID}`);
+      
+      if (!req.isAuthenticated()) {
+        return res.status(401).json({ message: "Not authenticated" });
+      }
+
       const userId = req.user?.id || req.user?.claims?.sub;
       if (!userId) {
-        return res.status(401).json({ message: "User not found" });
+        console.error("[AUTH] Authenticated but no UserID found in req.user");
+        return res.status(401).json({ message: "User ID not found" });
       }
+      
       const user = await authStorage.getUser(userId);
+      if (!user) {
+        console.error(`[AUTH] UserID ${userId} found in session but not in database`);
+        return res.status(401).json({ message: "User record not found" });
+      }
+
       res.json(user);
     } catch (error) {
-      console.error("Error fetching user:", error);
+      console.error("[AUTH] Error fetching user:", error);
       res.status(500).json({ message: "Failed to fetch user" });
     }
   });

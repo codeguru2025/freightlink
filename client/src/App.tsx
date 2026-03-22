@@ -52,6 +52,10 @@ function AdminRoute({ component: Component }: { component: React.ComponentType }
 
 function AuthenticatedRoutes() {
   const { user, isLoading: authLoading } = useAuth();
+  
+  if (!authLoading) {
+    console.log("[APP] Auth state loaded. User:", user ? user.id : "null");
+  }
 
   const { data: profile, isLoading: profileLoading } = useQuery<UserProfile | null>({
     queryKey: ["/api/profile"],

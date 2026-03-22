@@ -12,13 +12,14 @@ export function getSession() {
   const pgStore = connectPg(session);
   const sessionStore = new pgStore({
     pool: pool,
-    createTableIfMissing: true, // Automatically create the session table if it's missing locally
+    createTableIfMissing: true,
     ttl: sessionTtl,
     tableName: "sessions",
+    pruneSessionInterval: 60 * 60, // Prune expired sessions every hour
   });
 
   sessionStore.on('error', (error) => {
-    console.error("Session Store Error:", error);
+    console.error("[AUTH] Session Store Error:", error);
   });
 
   return session({
@@ -26,7 +27,8 @@ export function getSession() {
     store: sessionStore,
     resave: false,
     saveUninitialized: false,
-    name: "freightlink.sid", // Explicit cookie name
+    name: "freightlink.sid",
+    proxy: true,
     cookie: {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
@@ -58,7 +60,6 @@ export async function setupAuth(app: Express) {
     throw new Error("GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET must be set");
   }
 
-  app.set("trust proxy", 1);
   app.use(getSession());
   app.use(passport.initialize());
   app.use(passport.session());
