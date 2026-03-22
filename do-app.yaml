@@ -22,13 +22,8 @@ services:
   - key: APP_URL
     scope: RUN_TIME
     value: https://freightlink-i8hsp.ondigitalocean.app
-  # Migration variable - must be Direct Connection
-  - key: MIGRATE_DATABASE_URL
-    scope: RUN_TIME
-    type: SECRET
-    from_secret: DIRECT_DATABASE_URL
   # DB and Auth secrets are component-specific or globally inherited
-  - key: DIRECT_DATABASE_URL
+  - key: MIGRATE_DATABASE_URL
     scope: RUN_TIME
     type: SECRET
   - key: SESSION_SECRET
@@ -84,10 +79,3 @@ jobs:
     from_secret: MIGRATE_DATABASE_URL
   - key: NODE_ENV
     value: production
-
-databases:
-- name: freightlink-db
-  engine: PG
-  version: "16"
-  size_slug: db-s-dev-database
-  num_nodes: 1
