@@ -16,6 +16,9 @@ const ssl = isProduction ? { rejectUnauthorized: false } : undefined;
 
 export const pool = new Pool({ 
   connectionString: process.env.DATABASE_URL,
-  ssl
+  ssl,
+  max: 20, // Max connections for the pooler
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 2000,
 });
 export const db = drizzle(pool, { schema });

@@ -1,8 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { setupAuth, registerAuthRoutes, isAuthenticated, hasAcceptedTerms } from "./replit_integrations/auth";
-import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
+import { setupAuth, registerAuthRoutes, isAuthenticated, hasAcceptedTerms } from "./auth";
 import { s3Client, SPACES_BUCKET } from "./s3";
 import { PutObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
@@ -109,9 +108,6 @@ export async function registerRoutes(
   await setupAuth(app);
   registerAuthRoutes(app);
   
-  // Setup object storage routes for file uploads
-  registerObjectStorageRoutes(app);
-
   // DigitalOcean Spaces Presigned URL Uploads
   app.post("/api/media/upload-url", hasAcceptedTerms, async (req, res) => {
     try {
@@ -1469,8 +1465,7 @@ export async function registerRoutes(
       const paynow = new Paynow(integrationId, integrationKey);
       
       // Set URLs for callbacks
-      const domain = process.env.REPLIT_DOMAINS?.split(',')[0] || process.env.REPLIT_DEV_DOMAIN;
-      const baseUrl = domain ? `https://${domain}` : "https://localhost:5000";
+      const baseUrl = process.env.APP_URL || `https://${req.get('host')}`;
       paynow.resultUrl = `${baseUrl}/api/wallet/paynow-webhook`;
       paynow.returnUrl = `${baseUrl}/wallet?topup=success`;
 
