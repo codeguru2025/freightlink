@@ -53,16 +53,10 @@ async function upsertUser(profile: Profile) {
   });
 
   return user;
-}
-
 export async function setupAuth(app: Express) {
   if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
     throw new Error("GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET must be set");
   }
-
-  app.use(getSession());
-  app.use(passport.initialize());
-  app.use(passport.session());
 
   // Use a dynamic callback URL based on the request host
   const getCallbackURL = (req: any) => {
@@ -102,14 +96,17 @@ export async function setupAuth(app: Express) {
 
   passport.deserializeUser(async (id: string, done) => {
     try {
+      console.log(`[AUTH] Deserializing user ID: ${id}`);
       const user = await authStorage.getUser(id);
       if (user) {
+        console.log(`[AUTH] Deserialization successful for user: ${user.email}`);
         done(null, user);
       } else {
+        console.warn(`[AUTH] Deserialization failed: User ID ${id} not found in database`);
         done(null, false);
       }
     } catch (error) {
-      console.error("Error deserializing user:", error);
+      console.error("[AUTH] Error deserializing user:", error);
       done(error);
     }
   });

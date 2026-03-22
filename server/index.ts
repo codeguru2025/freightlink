@@ -2,6 +2,8 @@ import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
+import { getSession } from "./auth/googleAuth";
+import passport from "passport";
 
 const app = express();
 app.set("trust proxy", 1); // Trust first proxy (DigitalOcean)
@@ -12,6 +14,11 @@ declare module "http" {
     rawBody: unknown;
   }
 }
+
+// Session must be initialized before ANY other middleware that uses it
+app.use(getSession());
+app.use(passport.initialize());
+app.use(passport.session());
 
 app.use(
   express.json({
@@ -41,6 +48,14 @@ export function log(message: string, source = "express") {
 
   console.log(`${formattedTime} [${source}] ${message}`);
 }
+
+// Debug middleware to log session state for API calls
+app.use("/api", (req: any, _res, next) => {
+  if (req.path !== "/auth/user") { // Don't spam user endpoint logs
+    console.log(`[API] ${req.method} ${req.path} - Authenticated: ${req.isAuthenticated()}, SessionID: ${req.sessionID || 'none'}`);
+  }
+  next();
+});
 
 app.use((req, res, next) => {
   const start = Date.now();
@@ -94,19 +109,8 @@ app.use((req, res, next) => {
     await setupVite(httpServer, app);
   }
 
-  // ALWAYS serve the app on the port specified in the environment variable PORT
-  // Other ports are firewalled. Default to 5000 if not specified.
-  // this serves both the API and the client.
-  // It is the only port that is not firewalled.
-  const port = parseInt(process.env.PORT || "5000", 10);
-  httpServer.listen(
-    {
-      port,
-      host: "0.0.0.0",
-      reusePort: true,
-    },
-    () => {
-      log(`serving on port ${port}`);
-    },
-  );
+  const PORT = 5000;
+  httpServer.listen(PORT, "0.0.0.0", () => {
+    log(`serving on port ${PORT}`);
+  });
 })();
