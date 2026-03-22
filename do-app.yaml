@@ -70,7 +70,7 @@ jobs:
   github:
     branch: main
     repo: codeguru2025/freightlink
-  build_command: npm install
+  build_command: npm install --include=dev
   run_command: npx tsx server/migrate.ts
   envs:
   - key: DATABASE_URL
