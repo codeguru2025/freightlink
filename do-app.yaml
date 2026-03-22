@@ -71,7 +71,7 @@ jobs:
     branch: main
     repo: codeguru2025/freightlink
   build_command: npm install
-  run_command: npx drizzle-kit push --force
+  run_command: npx tsx server/migrate.ts
   envs:
   - key: DATABASE_URL
     scope: RUN_TIME

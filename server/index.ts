@@ -20,6 +20,18 @@ const dbUrl = process.env.DATABASE_URL || "";
 const maskedDbUrl = dbUrl.replace(/:([^@]+)@/, ":****@");
 console.log(`[DB] Connecting to: ${maskedDbUrl}`);
 
+// Check for required tables at startup
+import { sql } from "drizzle-orm";
+import { db } from "./db";
+(async () => {
+  try {
+    const result = await db.execute(sql`SELECT count(*) FROM users`);
+    console.log(`[DB] Startup check: 'users' table exists and contains ${result.rows[0].count} users.`);
+  } catch (e: any) {
+    console.warn(`[DB] Startup check WARNING: 'users' table might be missing: ${e.message}`);
+  }
+})();
+
 // Satisfy Express view engine requirement if it ever tries to render a view (prevents startup crash)
 app.set("view engine", "html");
 app.engine("html", (path: string, options: any, callback: any) => {
