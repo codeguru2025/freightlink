@@ -4,6 +4,30 @@ import { serveStatic } from "./static";
 import { createServer } from "http";
 import { getSession } from "./auth/googleAuth";
 import passport from "passport";
+import helmet from "helmet";
+import rateLimit from "express-rate-limit";
+
+// --- 1. ENVIRONMENT VALIDATION (Maintainability) ---
+const REQUIRED_ENV = [
+  "DATABASE_URL",
+  "GOOGLE_CLIENT_ID",
+  "GOOGLE_CLIENT_SECRET",
+  "SESSION_SECRET",
+  "APP_URL",
+  "DO_SPACES_ENDPOINT",
+  "DO_SPACES_KEY",
+  "DO_SPACES_SECRET",
+  "DO_SPACES_BUCKET"
+];
+
+const missingEnv = REQUIRED_ENV.filter(env => !process.env[env]);
+if (missingEnv.length > 0) {
+  console.error(`[FATAL] Missing required environment variables: ${missingEnv.join(", ")}`);
+  // In production, we might want to exit, but let's just log for now to avoid bricking the app if user is still configuring
+  if (process.env.NODE_ENV === "production") {
+    console.warn("[WARN] Application starting with missing production environment variables.");
+  }
+}
 
 // In DigitalOcean, internal requests between services or to the DB 
 // often use self-signed certificates. We need to tell Node to allow them.
@@ -12,8 +36,40 @@ if (process.env.NODE_ENV === "production") {
 }
 
 const app = express();
+
+// --- 2. SECURITY (Security & Scalability) ---
 // Trust proxy settings MUST be set before ANY session/auth middleware
 app.set("trust proxy", 1); 
+
+// Helmet for security headers
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", "https://accounts.google.com"],
+      styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+      imgSrc: ["'self'", "data:", "https:", `https://${process.env.DO_SPACES_BUCKET}.${process.env.DO_SPACES_ENDPOINT?.replace('https://', '')}`],
+      connectSrc: ["'self'", "https://accounts.google.com", "*.digitaloceanspaces.com"],
+      fontSrc: ["'self'", "https://fonts.gstatic.com"],
+      objectSrc: ["'none'"],
+      upgradeInsecureRequests: [],
+    },
+  },
+  crossOriginEmbedderPolicy: false, // Required for some third-party scripts/images
+}));
+
+// Rate limiting to prevent abuse
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 1000, // limit each IP to 1000 requests per windowMs
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: "Too many requests from this IP, please try again after 15 minutes",
+  skip: (req) => req.path.startsWith("/static") || req.path.startsWith("/assets"), // Don't rate limit static files
+});
+
+// Apply rate limiter to all requests
+app.use(limiter);
 
 // Log database connection info (masked for security)
 const dbUrl = process.env.DATABASE_URL || "";
@@ -381,13 +437,20 @@ app.use((req, res, next) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";
 
-    console.error("Internal Server Error:", err);
+    // --- 3. ERROR HANDLING (Maintainability & Usability) ---
+    console.error(`[ERROR] ${new Date().toISOString()} :: ${status} :: ${message}`, err);
 
     if (res.headersSent) {
       return next(err);
     }
 
-    return res.status(status).json({ message });
+    // Hide stack traces in production for security
+    const response = {
+      message,
+      ...(process.env.NODE_ENV !== "production" ? { stack: err.stack } : {}),
+    };
+
+    return res.status(status).json(response);
   });
 
   // importantly only setup vite in development and after
@@ -401,7 +464,25 @@ app.use((req, res, next) => {
   }
 
   const PORT = 5000;
-  httpServer.listen(PORT, "0.0.0.0", () => {
+  const server = httpServer.listen(PORT, "0.0.0.0", () => {
     log(`serving on port ${PORT}`);
   });
+
+  // --- 4. GRACEFUL SHUTDOWN (Operability) ---
+  const gracefulShutdown = () => {
+    console.log("[SERVER] Received shutdown signal. Closing HTTP server...");
+    server.close(() => {
+      console.log("[SERVER] HTTP server closed. Exiting process.");
+      process.exit(0);
+    });
+
+    // Force close after 10s if it takes too long
+    setTimeout(() => {
+      console.error("[SERVER] Could not close connections in time, forcefully shutting down");
+      process.exit(1);
+    }, 10000);
+  };
+
+  process.on("SIGTERM", gracefulShutdown);
+  process.on("SIGINT", gracefulShutdown);
 })();
