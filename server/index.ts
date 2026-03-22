@@ -15,6 +15,11 @@ const app = express();
 // Trust proxy settings MUST be set before ANY session/auth middleware
 app.set("trust proxy", 1); 
 
+// Log database connection info (masked for security)
+const dbUrl = process.env.DATABASE_URL || "";
+const maskedDbUrl = dbUrl.replace(/:([^@]+)@/, ":****@");
+console.log(`[DB] Connecting to: ${maskedDbUrl}`);
+
 // Satisfy Express view engine requirement if it ever tries to render a view (prevents startup crash)
 app.set("view engine", "html");
 app.engine("html", (path: string, options: any, callback: any) => {
