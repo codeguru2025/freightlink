@@ -53,6 +53,8 @@ async function upsertUser(profile: Profile) {
   });
 
   return user;
+}
+
 export async function setupAuth(app: Express) {
   if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
     throw new Error("GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET must be set");
