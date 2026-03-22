@@ -39,13 +39,26 @@ const allowlist = [
 ];
 
 async function buildAll() {
+  console.log(`Project root: ${projectRoot}`);
+  console.log(`Checking for index.html at: ${path.resolve(projectRoot, "client/index.html")}`);
+  
   await rm(path.resolve(projectRoot, "dist"), { recursive: true, force: true });
 
   console.log("building client...");
-  await viteBuild({
-    configFile: path.resolve(projectRoot, "vite.config.ts"),
-    root: path.resolve(projectRoot, "client"),
-  });
+  try {
+    await viteBuild({
+      configFile: path.resolve(projectRoot, "vite.config.ts"),
+      root: path.resolve(projectRoot, "client"),
+      build: {
+        outDir: path.resolve(projectRoot, "dist/public"),
+        emptyOutDir: true,
+      }
+    });
+  } catch (error) {
+    console.error("Vite build failed:");
+    console.error(error);
+    process.exit(1);
+  }
 
   console.log("building server...");
   const pkg = JSON.parse(await readFile(path.resolve(projectRoot, "package.json"), "utf-8"));
