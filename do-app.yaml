@@ -18,6 +18,7 @@ services:
   - key: DATABASE_URL
     scope: RUN_TIME
     type: SECRET
+    description: "Use the TRANSACTION POOLER URL (Port 25061) for the web service"
   - key: SESSION_SECRET
     scope: RUN_TIME
     type: SECRET
@@ -67,6 +68,7 @@ jobs:
   - key: DATABASE_URL
     scope: RUN_TIME
     type: SECRET
+    description: "Use the DIRECT CONNECTION URL (Port 25060) for migrations"
   - key: NODE_ENV
     value: production
 
