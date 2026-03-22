@@ -7,20 +7,25 @@ import { authStorage } from "./storage";
 import { storage } from "../storage";
 import { pool } from "../db";
 
+const pgStore = connectPg(session);
+let sessionStore: any = null;
+
 export function getSession() {
   const sessionTtl = 7 * 24 * 60 * 60 * 1000; // 1 week
-  const pgStore = connectPg(session);
-  const sessionStore = new pgStore({
-    pool: pool,
-    createTableIfMissing: true,
-    ttl: sessionTtl,
-    tableName: "sessions",
-    pruneSessionInterval: 60 * 60, // Prune expired sessions every hour
-  });
+  
+  if (!sessionStore) {
+    sessionStore = new pgStore({
+      pool: pool,
+      createTableIfMissing: true,
+      ttl: sessionTtl,
+      tableName: "sessions",
+      pruneSessionInterval: 60 * 60, // Prune expired sessions every hour
+    });
 
-  sessionStore.on('error', (error) => {
-    console.error("[AUTH] Session Store Error:", error);
-  });
+    sessionStore.on('error', (error: any) => {
+      console.error("[AUTH] Session Store Error:", error);
+    });
+  }
 
   return session({
     secret: process.env.SESSION_SECRET!,
@@ -60,19 +65,18 @@ export async function setupAuth(app: Express) {
     throw new Error("GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET must be set");
   }
 
-  // Use a dynamic callback URL based on the request host
-  const getCallbackURL = (req: any) => {
-    const protocol = req.protocol === 'http' && req.get('x-forwarded-proto') === 'https' ? 'https' : req.protocol;
-    const host = req.get('host');
-    return `${protocol}://${host}/api/callback`;
-  };
+  const callbackURL = process.env.APP_URL 
+    ? `${process.env.APP_URL}/api/callback` 
+    : "/api/callback";
+
+  console.log(`[AUTH] Using callback URL: ${callbackURL}`);
 
   passport.use(
     new GoogleStrategy(
       {
         clientID: process.env.GOOGLE_CLIENT_ID!,
         clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
-        callbackURL: "/api/callback", // Relative path allows Passport to handle the host dynamically
+        callbackURL: callbackURL,
         proxy: true,
       },
       async (accessToken, refreshToken, profile, done) => {

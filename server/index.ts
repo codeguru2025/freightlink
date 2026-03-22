@@ -6,7 +6,15 @@ import { getSession } from "./auth/googleAuth";
 import passport from "passport";
 
 const app = express();
-app.set("trust proxy", 1); // Trust first proxy (DigitalOcean)
+// Trust proxy settings MUST be set before ANY session/auth middleware
+app.set("trust proxy", 1); 
+
+// Satisfy Express view engine requirement if it ever tries to render a view (prevents startup crash)
+app.set("view engine", "html");
+app.engine("html", (path: string, options: any, callback: any) => {
+  callback(null, ""); 
+});
+
 const httpServer = createServer(app);
 
 declare module "http" {
