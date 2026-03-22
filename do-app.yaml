@@ -18,14 +18,13 @@ services:
   - key: APP_URL
     scope: RUN_TIME
     value: https://freightlink-i8hsp.ondigitalocean.app
+  # DB and Auth secrets are component-specific or globally inherited
   - key: DATABASE_URL
     scope: RUN_TIME
     type: SECRET
-    description: "Use the TRANSACTION POOLER URL (Port 25061) for the web service"
   - key: DIRECT_DATABASE_URL
     scope: RUN_TIME
     type: SECRET
-    description: "Use the DIRECT CONNECTION URL (Port 25060) for migrations"
   - key: SESSION_SECRET
     scope: RUN_TIME
     type: SECRET
@@ -47,21 +46,7 @@ services:
   - key: PAYNOW_INTEGRATION_KEY
     scope: RUN_TIME
     type: SECRET
-  - key: OBJECT_STORAGE_ENDPOINT
-    scope: RUN_TIME
-    type: SECRET
-  - key: OBJECT_STORAGE_REGION
-    scope: RUN_TIME
-    type: SECRET
-  - key: OBJECT_STORAGE_BUCKET
-    scope: RUN_TIME
-    type: SECRET
-  - key: OBJECT_STORAGE_ACCESS_KEY
-    scope: RUN_TIME
-    type: SECRET
-  - key: OBJECT_STORAGE_SECRET_KEY
-    scope: RUN_TIME
-    type: SECRET
+  # DigitalOcean Spaces (S3) variables are inherited from App level if set there
   - key: DO_SPACES_ENDPOINT
     scope: RUN_TIME
     type: SECRET
