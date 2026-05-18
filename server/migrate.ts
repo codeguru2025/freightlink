@@ -4,7 +4,7 @@ import { sql } from "drizzle-orm";
 import * as schema from "../shared/schema";
 
 async function runMigration() {
-  const dbUrl = process.env.DATABASE_URL;
+  const dbUrl = process.env.MIGRATE_DATABASE_URL || process.env.DATABASE_URL;
   if (!dbUrl) {
     console.error("[MIGRATE] ERROR: DATABASE_URL is not set");
     process.exit(1);

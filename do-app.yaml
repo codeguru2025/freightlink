@@ -13,56 +13,9 @@ services:
   build_command: npm install && npm run build
   run_command: npm run start
   envs:
-  - key: DATABASE_URL
-    scope: RUN_TIME
-    type: SECRET
-    from_secret: DATABASE_URL
   - key: NODE_ENV
+    scope: RUN_AND_BUILD_TIME
     value: production
-  - key: APP_URL
-    scope: RUN_TIME
-    value: https://freightlinkzw.com
-  # DB and Auth secrets are component-specific or globally inherited
-  - key: MIGRATE_DATABASE_URL
-    scope: RUN_TIME
-    type: SECRET
-  - key: SESSION_SECRET
-    scope: RUN_TIME
-    type: SECRET
-  - key: GOOGLE_CLIENT_ID
-    scope: RUN_TIME
-    type: SECRET
-  - key: GOOGLE_CLIENT_SECRET
-    scope: RUN_TIME
-    type: SECRET
-  - key: ADMIN_USERNAME
-    scope: RUN_TIME
-    type: SECRET
-  - key: ADMIN_PASSWORD
-    scope: RUN_TIME
-    type: SECRET
-  - key: PAYNOW_INTEGRATION_ID
-    scope: RUN_TIME
-    type: SECRET
-  - key: PAYNOW_INTEGRATION_KEY
-    scope: RUN_TIME
-    type: SECRET
-  # DigitalOcean Spaces (S3) variables are inherited from App level if set there
-  - key: DO_SPACES_ENDPOINT
-    scope: RUN_TIME
-    type: SECRET
-  - key: DO_SPACES_KEY
-    scope: RUN_TIME
-    type: SECRET
-  - key: DO_SPACES_SECRET
-    scope: RUN_TIME
-    type: SECRET
-  - key: DO_SPACES_BUCKET
-    scope: RUN_TIME
-    type: SECRET
-  - key: DO_SPACES_REGION
-    scope: RUN_TIME
-    type: SECRET
 
 jobs:
 - name: db-migrate
@@ -73,9 +26,6 @@ jobs:
   build_command: npm install --include=dev
   run_command: npx tsx server/migrate.ts
   envs:
-  - key: DATABASE_URL
-    scope: RUN_TIME
-    type: SECRET
-    from_secret: MIGRATE_DATABASE_URL
   - key: NODE_ENV
+    scope: RUN_AND_BUILD_TIME
     value: production
