@@ -22,7 +22,6 @@ import JobsPage from "@/pages/jobs";
 import TrucksPage from "@/pages/trucks";
 import AdminLoadsPage from "@/pages/admin/loads";
 import AdminUsersPage from "@/pages/admin/users";
-import AdminAnalyticsPage from "@/pages/admin/analytics";
 import DocumentsPage from "@/pages/documents";
 import MessagesPage from "@/pages/messages";
 import ReviewsPage from "@/pages/reviews";
@@ -30,7 +29,6 @@ import JobDetailPage from "@/pages/job-detail";
 import AdminDocumentsPage from "@/pages/admin-documents";
 import AdminDisputesPage from "@/pages/admin-disputes";
 import PodManagementPage from "@/pages/pod-management";
-import WalletPage from "@/pages/wallet";
 import ReportsPage from "@/pages/reports";
 import AdminReportsPage from "@/pages/admin/reports";
 import SettingsPage from "@/pages/settings";
@@ -113,14 +111,12 @@ function AuthenticatedRoutes() {
       <Route path="/messages" component={MessagesPage} />
       <Route path="/reviews" component={ReviewsPage} />
       <Route path="/pod" component={PodManagementPage} />
-      <Route path="/wallet" component={WalletPage} />
       <Route path="/reports" component={ReportsPage} />
       <Route path="/settings" component={SettingsPage} />
       <Route path="/admin/loads">{() => <AdminRoute component={AdminLoadsPage} />}</Route>
       <Route path="/admin/users">{() => <AdminRoute component={AdminUsersPage} />}</Route>
       <Route path="/admin/documents">{() => <AdminRoute component={AdminDocumentsPage} />}</Route>
       <Route path="/admin/disputes">{() => <AdminRoute component={AdminDisputesPage} />}</Route>
-      <Route path="/admin/analytics">{() => <AdminRoute component={AdminAnalyticsPage} />}</Route>
       <Route path="/compliance" component={CompliancePage} />
       <Route path="/admin/bids">{() => <AdminRoute component={AdminBidsPage} />}</Route>
       <Route path="/admin/reports">{() => <AdminRoute component={AdminReportsPage} />}</Route>

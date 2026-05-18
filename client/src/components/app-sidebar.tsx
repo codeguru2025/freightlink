@@ -67,9 +67,7 @@ export function AppSidebar() {
     { title: "POD & Payments", url: "/pod", icon: Receipt },
     { title: "My Trucks", url: "/trucks", icon: TruckIcon },
     { title: "Messages", url: "/messages", icon: MessageSquare },
-    { title: "Documents", url: "/documents", icon: FileText },
     { title: "My Reviews", url: "/reviews", icon: Star },
-    { title: "Reports", url: "/reports", icon: BarChart3 },
   ];
 
   const adminMenuItems = [
@@ -82,8 +80,7 @@ export function AppSidebar() {
     { title: "Documents", url: "/admin/documents", icon: FileText },
     { title: "Disputes", url: "/admin/disputes", icon: AlertTriangle },
     { title: "Messages", url: "/messages", icon: MessageSquare },
-    { title: "Analytics", url: "/admin/analytics", icon: BarChart3 },
-    { title: "Reports", url: "/admin/reports", icon: FileText },
+    { title: "Reports & Analytics", url: "/admin/reports", icon: BarChart3 },
   ];
 
   const menuItems = profile?.role === "admin" 
