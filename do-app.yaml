@@ -1,5 +1,5 @@
-name: freightlink-zw
-region: nyc
+name: freightlinkzw
+region: lon
 services:
 - name: web
   github:
@@ -21,7 +21,7 @@ services:
     value: production
   - key: APP_URL
     scope: RUN_TIME
-    value: https://freightlink-i8hsp.ondigitalocean.app
+    value: https://freightlinkzw.com
   # DB and Auth secrets are component-specific or globally inherited
   - key: MIGRATE_DATABASE_URL
     scope: RUN_TIME
