@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import logoPath from "@assets/ChatGPT_Image_Feb_1,_2026,_09_08_34_AM_1769930479384.png";
+const logoPath = "/logo.png";
 
 interface SplashScreenProps {
   onComplete: () => void;

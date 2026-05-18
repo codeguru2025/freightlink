@@ -34,7 +34,7 @@ import {
   Wallet,
 } from "lucide-react";
 import type { UserProfile } from "@shared/schema";
-import logoPath from "@assets/ChatGPT_Image_Feb_1,_2026,_09_08_34_AM_1769930479384.png";
+const logoPath = "/logo.png";
 
 export function AppSidebar() {
   const [location] = useLocation();

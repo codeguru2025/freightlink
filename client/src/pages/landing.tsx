@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Truck, Package, Shield, MapPin, Clock, Users, ArrowRight, CheckCircle, KeyRound } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import logoPath from "@assets/ChatGPT_Image_Feb_1,_2026,_09_08_34_AM_1769930479384.png";
+const logoPath = "/logo.png";
 
 export default function LandingPage() {
   const [username, setUsername] = useState("");

@@ -13,3 +13,4 @@ attached_assets/
 *.jpg
 *.jpeg
 *.gif
+!client/public/logo.png
