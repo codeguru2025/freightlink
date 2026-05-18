@@ -16,6 +16,15 @@ services:
   - key: NODE_ENV
     scope: RUN_AND_BUILD_TIME
     value: production
+  - key: PAYNOW_INTEGRATION_ID
+    scope: RUN_TIME
+    value: "REPLACE_WITH_PAYNOW_INTEGRATION_ID"
+  - key: PAYNOW_INTEGRATION_KEY
+    scope: RUN_TIME
+    value: "REPLACE_WITH_PAYNOW_INTEGRATION_KEY"
+  - key: PAYNOW_EMAIL
+    scope: RUN_TIME
+    value: "REPLACE_WITH_PAYNOW_MERCHANT_EMAIL"
 
 jobs:
 - name: db-migrate

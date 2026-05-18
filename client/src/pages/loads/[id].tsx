@@ -48,50 +48,10 @@ export default function LoadDetailPage() {
     enabled: !!loadId,
   });
 
-  const acceptBidMutation = useMutation({
-    mutationFn: async (bidId: string) => {
-      const response = await apiRequest("POST", `/api/bids/${bidId}/accept`);
-      return response.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/loads", loadId] });
-      queryClient.invalidateQueries({ queryKey: ["/api/jobs"] });
-      toast({
-        title: "Bid accepted!",
-        description: "A job has been created and the transporter has been notified.",
-      });
-    },
-    onError: (error) => {
-      toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to accept bid",
-        variant: "destructive",
-      });
-    },
-  });
-
-  const rejectBidMutation = useMutation({
-    mutationFn: async (bidId: string) => {
-      const response = await apiRequest("POST", `/api/bids/${bidId}/reject`);
-      return response.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/loads", loadId] });
-      toast({
-        title: "Bid rejected",
-        description: "The transporter has been notified.",
-      });
-    },
-    onError: (error) => {
-      toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to reject bid",
-        variant: "destructive",
-      });
-    },
-  });
+  const isAdmin = profile?.role === "admin";
 
   const isOwner = load?.shipperId === profile?.userId;
+  const loadWithContact = load as any;
 
   if (isLoading) {
     return (
@@ -261,7 +221,11 @@ export default function LoadDetailPage() {
                     </div>
                     <Badge variant="outline">{load.bids?.length || 0} bids</Badge>
                   </div>
-                  <CardDescription>Review and accept bids from transporters</CardDescription>
+                  <CardDescription>
+                  {isAdmin
+                    ? "Review and accept bids on behalf of Sage-Route Logistics"
+                    : "Sage-Route Logistics reviews and accepts bids on your behalf"}
+                </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   {load.bids && load.bids.length > 0 ? (
@@ -269,9 +233,9 @@ export default function LoadDetailPage() {
                       <BidCard
                         key={bid.id}
                         bid={bid}
-                        showActions={load.status === "posted"}
-                        onAccept={() => acceptBidMutation.mutate(bid.id)}
-                        onReject={() => rejectBidMutation.mutate(bid.id)}
+                        showActions={false}
+                        onAccept={() => {}}
+                        onReject={() => {}}
                       />
                     ))
                   ) : (

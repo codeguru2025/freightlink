@@ -1,8 +1,11 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { DashboardLayout } from "@/components/dashboard-layout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { useToast } from "@/hooks/use-toast";
+import { apiRequest } from "@/lib/queryClient";
 import { 
   Table,
   TableBody,
@@ -11,7 +14,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Users, Mail, Phone, MapPin, Calendar, CheckCircle, XCircle } from "lucide-react";
+import { Users, Mail, Phone, MapPin, Calendar, CheckCircle, XCircle, ShieldCheck, ShieldX } from "lucide-react";
 import type { UserProfile } from "@shared/schema";
 
 type UserWithEmail = UserProfile & { email?: string };
@@ -23,8 +26,26 @@ const roleColors: Record<string, string> = {
 };
 
 export default function AdminUsersPage() {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
   const { data: users, isLoading } = useQuery<UserWithEmail[]>({
     queryKey: ["/api/admin/users"],
+  });
+
+  const verifyMutation = useMutation({
+    mutationFn: async ({ userId, verified }: { userId: string; verified: boolean }) => {
+      const res = await apiRequest("PATCH", `/api/admin/users/${userId}/verify`, { verified });
+      if (!res.ok) throw new Error("Failed to update verification");
+      return res.json();
+    },
+    onSuccess: (_, { verified }) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+      toast({ title: verified ? "Transporter verified" : "Verification revoked", description: verified ? "Transporter can now access loads." : "Transporter access has been suspended." });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to update verification status", variant: "destructive" });
+    },
   });
 
   const formatDate = (date: Date | string | null) => {
@@ -72,6 +93,7 @@ export default function AdminUsersPage() {
                       <TableHead>City</TableHead>
                       <TableHead>Verified</TableHead>
                       <TableHead>Joined</TableHead>
+                      <TableHead>Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -122,6 +144,30 @@ export default function AdminUsersPage() {
                             <Calendar className="h-3 w-3" />
                             {formatDate(user.createdAt)}
                           </div>
+                        </TableCell>
+                        <TableCell>
+                          {user.role === "transporter" && (
+                            user.isVerified ? (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="text-destructive border-destructive hover:bg-destructive hover:text-white"
+                                onClick={() => verifyMutation.mutate({ userId: user.userId, verified: false })}
+                                disabled={verifyMutation.isPending}
+                              >
+                                <ShieldX className="h-3 w-3 mr-1" />Revoke
+                              </Button>
+                            ) : (
+                              <Button
+                                size="sm"
+                                className="bg-green-600 hover:bg-green-700 text-white"
+                                onClick={() => verifyMutation.mutate({ userId: user.userId, verified: true })}
+                                disabled={verifyMutation.isPending}
+                              >
+                                <ShieldCheck className="h-3 w-3 mr-1" />Verify
+                              </Button>
+                            )
+                          )}
                         </TableCell>
                       </TableRow>
                     ))}

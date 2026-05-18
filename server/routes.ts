@@ -301,19 +301,21 @@ export async function registerRoutes(
       if (!userId) return res.status(401).json({ message: "Unauthorized" });
 
       const profile = await storage.getProfile(userId);
-      
-      // For transporters, filter loads based on wallet balance (commission coverage)
+
+      // Unverified transporters cannot see the marketplace (per compliance rules)
+      if (profile?.role === "transporter" && !profile.isVerified) {
+        return res.status(403).json({
+          message: "Your account is pending verification. Please upload your compliance documents and wait for admin approval before accessing available loads.",
+          requiresVerification: true,
+        });
+      }
+
       if (profile?.role === "transporter") {
         const loads = await storage.getAvailableLoadsForTransporter(userId);
-        const wallet = await storage.getOrCreateWallet(userId);
         return res.json({
           loads,
-          walletBalance: wallet.balance,
-          currency: wallet.currency,
-          commissionRate: 0.10,
-          message: loads.length === 0 
-            ? "No loads available within your wallet balance. Top up your wallet to see more loads."
-            : undefined
+          commissionRate: 0.15,
+          message: loads.length === 0 ? "No loads available at the moment. Check back soon." : undefined
         });
       }
 
@@ -340,19 +342,36 @@ export async function registerRoutes(
         return res.status(404).json({ message: "Load not found" });
       }
 
-      // Only show bids to the load owner (shipper) - authorization fix
       const isOwner = load.shipperId === userId;
-      if (!isOwner) {
-        // Remove sensitive bid data and shipper details for non-owners
-        const { bids, shipper, ...loadWithoutBids } = load;
-        return res.json({
-          ...loadWithoutBids,
-          bids: undefined,
-          shipper: undefined,
-        });
+      const isAdmin = userId === "admin-system-user";
+
+      if (isOwner || isAdmin) {
+        return res.json(load);
       }
 
-      res.json(load);
+      // For transporters: hide pickup details until 15% fee is paid (per T&Cs clause 5)
+      const job = await storage.getJobForLoad(load.id, userId);
+      const feeIsPaid = job?.feeStatus === "paid";
+      const { bids, shipper, originAddress, ...publicLoad } = load as any;
+
+      // When fee is paid, also include shipper's contact details
+      let shipperContact: { phone?: string; name?: string } | undefined;
+      if (feeIsPaid && load.shipperId) {
+        const shipperProfile = await storage.getProfile(load.shipperId);
+        if (shipperProfile) {
+          shipperContact = {
+            phone: shipperProfile.phoneNumber || undefined,
+            name: `${shipperProfile.firstName || ""} ${shipperProfile.lastName || ""}`.trim() || undefined,
+          };
+        }
+      }
+
+      return res.json({
+        ...publicLoad,
+        originAddress: feeIsPaid ? originAddress : undefined,
+        shipperContact: feeIsPaid ? shipperContact : undefined,
+        pickupDetailsReleased: feeIsPaid,
+      });
     } catch (error) {
       console.error("Error fetching load:", error);
       res.status(500).json({ message: "Failed to fetch load" });
@@ -456,8 +475,17 @@ export async function registerRoutes(
       }
 
       const { loadId } = req.params;
+      // Unverified transporters cannot bid
+      const transporterProfile = await storage.getProfile(userId);
+      if (transporterProfile?.role === "transporter" && !transporterProfile.isVerified) {
+        return res.status(403).json({
+          message: "Your account must be verified before you can place bids. Please complete your compliance documents.",
+          requiresVerification: true,
+        });
+      }
+
       const load = await storage.getLoad(loadId);
-      
+
       if (!load) {
         return res.status(404).json({ message: "Load not found" });
       }
@@ -482,26 +510,7 @@ export async function registerRoutes(
         });
       }
 
-      // Calculate commission
-      const tonnes = parseFloat(load.weight) || 0;
-      const distanceKm = parseFloat(load.distanceKm || "0") || 0;
-      const commission = calculateCommission(tonnes, distanceKm);
-
-      // Pre-check balance before attempting atomic operation (for better error messages)
-      if (commission > 0) {
-        const availableBalance = await storage.getAvailableBalance(userId);
-        
-        if (availableBalance < commission) {
-          return res.status(400).json({ 
-            message: `Insufficient wallet balance to place bid. Required commission: $${commission.toFixed(2)}. Available balance: $${availableBalance.toFixed(2)}. Please top up your wallet before bidding.`,
-            requiredCommission: commission,
-            availableBalance: availableBalance,
-            shortfall: commission - availableBalance
-          });
-        }
-      }
-
-      // Use atomic bid creation with commission reservation
+      // No wallet reservation at bid time — 15% Interest Fee is triggered by Sage-Route upon acceptance (per T&Cs)
       const bid = await storage.createBidWithReservation({
         loadId,
         transporterId: userId,
@@ -511,12 +520,9 @@ export async function registerRoutes(
         truckId: truckId || null,
         notes: notes || null,
         status: "pending",
-      }, commission);
+      }, 0);
 
-      res.status(201).json({ 
-        ...bid, 
-        commissionReserved: commission > 0 ? commission : 0 
-      });
+      res.status(201).json(bid);
     } catch (error: any) {
       console.error("Error creating bid:", error);
       // Return specific error messages from atomic operation
@@ -537,17 +543,21 @@ export async function registerRoutes(
         return res.status(401).json({ message: "Unauthorized" });
       }
 
+      // Per T&Cs: only Sage-Route (admin) can accept bids
+      if (userId !== "admin-system-user") {
+        return res.status(403).json({ message: "Only Sage-Route Logistics can accept bids" });
+      }
+
       const { id } = req.params;
-      
-      // Pre-flight checks (for better error messages before atomic operation)
+
       const bid = await storage.getBid(id);
       if (!bid) {
         return res.status(404).json({ message: "Bid not found" });
       }
 
       const load = await storage.getLoad(bid.loadId);
-      if (!load || load.shipperId !== userId) {
-        return res.status(403).json({ message: "Only the load owner can accept bids" });
+      if (!load) {
+        return res.status(404).json({ message: "Load not found" });
       }
 
       if (bid.status !== "pending") {
@@ -555,23 +565,67 @@ export async function registerRoutes(
       }
 
       if (load.status !== "posted") {
-        return res.status(400).json({ message: "This load has already been assigned. Bid acceptance is no longer possible." });
+        return res.status(400).json({ message: "This load has already been assigned." });
       }
 
-      // Use atomic bid acceptance (handles all steps in a transaction)
+      // Accept bid atomically (no commission deducted — reserved commission is 0)
       const result = await storage.acceptBidAtomic(id, bid.loadId);
 
+      // Calculate 15% Interest Fee on agreed transport charge (per T&Cs)
+      const feeAmount = calculateCommission(parseFloat(bid.amount));
+      const feeReference = `FEE-${result.job.id}-${Date.now()}`;
+
+      // Update job with fee details
+      await storage.updateJobFeeStatus(result.job.id, "pending", feeAmount, feeReference);
+
+      // Trigger PayNow mobile payment to transporter for 15% fee
+      let paynowTriggered = false;
+      let paynowError = null;
+      try {
+        const transporterProfile = await storage.getProfile(bid.transporterId);
+        const transporterPhone = transporterProfile?.phoneNumber;
+        const paynowConfigured = !!(process.env.PAYNOW_INTEGRATION_ID && process.env.PAYNOW_INTEGRATION_KEY);
+
+        if (paynowConfigured && transporterPhone) {
+          const { Paynow } = await import("paynow");
+          const paynow = new Paynow(process.env.PAYNOW_INTEGRATION_ID!, process.env.PAYNOW_INTEGRATION_KEY!);
+          const baseUrl = process.env.APP_URL || `https://${req.get("host")}`;
+          paynow.resultUrl = `${baseUrl}/api/jobs/commission-callback`;
+          paynow.returnUrl = `${baseUrl}/jobs?fee=paid`;
+
+          const transporterUser = await import("./auth/storage").then(m => m.authStorage.getUser(bid.transporterId));
+          const userEmail = (transporterUser as any)?.email || process.env.PAYNOW_EMAIL || "noreply@freightlinkzw.com";
+          const payment = paynow.createPayment(feeReference, userEmail);
+          payment.add(`15% Interest Fee - ${load.title || load.originCity + " to " + load.destinationCity}`, feeAmount);
+
+          const normalizedPhone = transporterPhone.replace(/[^0-9]/g, "");
+          const intlPhone = normalizedPhone.startsWith("263") ? normalizedPhone : normalizedPhone.startsWith("0") ? "263" + normalizedPhone.slice(1) : "263" + normalizedPhone;
+
+          const response = await paynow.sendMobile(payment, intlPhone, "ecocash");
+          if (response.success) {
+            paynowTriggered = true;
+          } else {
+            paynowError = response.error;
+          }
+        }
+      } catch (paynowErr: any) {
+        paynowError = paynowErr?.message || "PayNow error";
+        console.error("[FEE] PayNow trigger error:", paynowError);
+      }
+
       res.json({ 
-        bid: result.bid, 
-        job: result.job, 
-        commissionDeducted: result.commissionDeducted,
-        otherBidsRejected: result.otherBidsRejected
+        bid: result.bid,
+        job: { ...result.job, feeAmount, feeReference, feeStatus: "pending" },
+        otherBidsRejected: result.otherBidsRejected,
+        feeAmount,
+        feeReference,
+        paynowTriggered,
+        paynowError,
       });
     } catch (error: any) {
       console.error("Error accepting bid:", error);
-      // Return specific error messages from atomic operation
       if (error.message === "Load already accepted or not found") {
-        return res.status(400).json({ message: "This load has already been assigned. Bid acceptance is no longer possible." });
+        return res.status(400).json({ message: "This load has already been assigned." });
       }
       if (error.message === "Bid not found or does not match load") {
         return res.status(404).json({ message: "Bid not found" });
@@ -1132,6 +1186,57 @@ export async function registerRoutes(
     }
   });
 
+  // Admin: verify or reject a transporter
+  app.patch("/api/admin/users/:id/verify", hasAcceptedTerms, requireAdmin, async (req, res) => {
+    try {
+      const { verified } = req.body;
+      if (typeof verified !== "boolean") {
+        return res.status(400).json({ message: "verified (boolean) is required" });
+      }
+      const updated = await storage.updateProfile(req.params.id, { isVerified: verified });
+      if (!updated) return res.status(404).json({ message: "User not found" });
+      res.json({ success: true, isVerified: updated.isVerified, userId: updated.userId });
+    } catch (error) {
+      console.error("Error verifying transporter:", error);
+      res.status(500).json({ message: "Failed to update verification status" });
+    }
+  });
+
+  // Admin: get all pending bids across all loads (for real-time review)
+  app.get("/api/admin/bids", hasAcceptedTerms, requireAdmin, async (req, res) => {
+    try {
+      const allLoads = await storage.getAllLoads();
+      const bidsWithContext = [];
+      for (const load of allLoads) {
+        const loadWithBids = await storage.getLoadWithBids(load.id);
+        if (loadWithBids?.bids && loadWithBids.bids.length > 0) {
+          for (const bid of loadWithBids.bids) {
+            const transporterProfile = await storage.getProfile(bid.transporterId);
+            bidsWithContext.push({ ...bid, load: loadWithBids, transporter: transporterProfile });
+          }
+        }
+      }
+      res.json(bidsWithContext);
+    } catch (error) {
+      console.error("Error fetching admin bids:", error);
+      res.status(500).json({ message: "Failed to fetch bids" });
+    }
+  });
+
+  // Transporter: get my compliance documents status
+  app.get("/api/compliance/documents", hasAcceptedTerms, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) return res.status(401).json({ message: "Unauthorized" });
+      const docs = await storage.getDocuments(userId);
+      const profile = await storage.getProfile(userId);
+      res.json({ documents: docs, isVerified: profile?.isVerified || false });
+    } catch (error) {
+      console.error("Error fetching compliance documents:", error);
+      res.status(500).json({ message: "Failed to fetch compliance documents" });
+    }
+  });
+
   // Messages routes
   app.get("/api/messages/conversations", hasAcceptedTerms, async (req, res) => {
     try {
@@ -1640,6 +1745,60 @@ export async function registerRoutes(
       res.status(200).send("OK");
     } catch (error: any) {
       console.error("[WEBHOOK] Error processing Paynow webhook:", error?.message || error);
+      res.status(500).send("Error");
+    }
+  });
+
+  // Commission fee callback — PayNow webhook for 15% Interest Fee payment (per T&Cs)
+  app.post("/api/jobs/commission-callback", async (req, res) => {
+    try {
+      const { reference, status, amount, paynowreference, hash } = req.body;
+      const integrationKey = process.env.PAYNOW_KEY || process.env.PAYNOW_INTEGRATION_KEY;
+
+      console.log("[FEE-WEBHOOK] Commission callback received:", { reference, status, amount });
+
+      if (!reference || !status) {
+        return res.status(400).send("Missing required fields");
+      }
+
+      if (!reference.startsWith("FEE-")) {
+        return res.status(400).send("Invalid reference format");
+      }
+
+      if (integrationKey && hash) {
+        if (!req.rawBody || !Buffer.isBuffer(req.rawBody)) {
+          return res.status(400).send("Invalid request format");
+        }
+        const rawString = req.rawBody.toString("utf-8");
+        const pairs = rawString.split("&");
+        const values: string[] = [];
+        for (const pair of pairs) {
+          const [key, value] = pair.split("=");
+          if (key !== "hash") values.push(decodeURIComponent((value || "").replace(/\+/g, " ")));
+        }
+        const expectedHash = crypto.createHash("sha512").update(values.join("") + integrationKey).digest("hex").toUpperCase();
+        const hashMatch = hash.length === expectedHash.length &&
+          crypto.timingSafeEqual(Buffer.from(hash.toUpperCase()), Buffer.from(expectedHash));
+        if (!hashMatch) {
+          console.error("[FEE-WEBHOOK] Invalid hash");
+          return res.status(403).send("Invalid signature");
+        }
+      }
+
+      const normalizedStatus = status.toLowerCase();
+      if (normalizedStatus === "paid") {
+        const job = await storage.getJobByFeeReference(reference);
+        if (!job) {
+          console.error("[FEE-WEBHOOK] Job not found for reference:", reference);
+          return res.status(404).send("Job not found");
+        }
+        await storage.updateJobFeeStatus(job.id, "paid");
+        console.log(`[FEE-WEBHOOK] Fee paid for job ${job.id} — pickup details released`);
+      }
+
+      res.status(200).send("OK");
+    } catch (error: any) {
+      console.error("[FEE-WEBHOOK] Error:", error?.message || error);
       res.status(500).send("Error");
     }
   });

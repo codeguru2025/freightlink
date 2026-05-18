@@ -34,6 +34,8 @@ import WalletPage from "@/pages/wallet";
 import ReportsPage from "@/pages/reports";
 import AdminReportsPage from "@/pages/admin/reports";
 import SettingsPage from "@/pages/settings";
+import CompliancePage from "@/pages/compliance";
+import AdminBidsPage from "@/pages/admin/bids";
 import NotFound from "@/pages/not-found";
 
 import type { UserProfile } from "@shared/schema";
@@ -86,6 +88,14 @@ function AuthenticatedRoutes() {
     return <RoleSelectionPage />;
   }
 
+  // Unverified transporters must complete compliance before accessing the app
+  if (profile.role === "transporter" && !profile.isVerified) {
+    const path = window.location.pathname;
+    if (path !== "/compliance") {
+      return <CompliancePage />;
+    }
+  }
+
   return (
     <Switch>
       <Route path="/" component={DashboardPage} />
@@ -111,6 +121,8 @@ function AuthenticatedRoutes() {
       <Route path="/admin/documents">{() => <AdminRoute component={AdminDocumentsPage} />}</Route>
       <Route path="/admin/disputes">{() => <AdminRoute component={AdminDisputesPage} />}</Route>
       <Route path="/admin/analytics">{() => <AdminRoute component={AdminAnalyticsPage} />}</Route>
+      <Route path="/compliance" component={CompliancePage} />
+      <Route path="/admin/bids">{() => <AdminRoute component={AdminBidsPage} />}</Route>
       <Route path="/admin/reports">{() => <AdminRoute component={AdminReportsPage} />}</Route>
       <Route component={NotFound} />
     </Switch>

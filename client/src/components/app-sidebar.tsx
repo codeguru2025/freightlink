@@ -32,6 +32,7 @@ import {
   AlertTriangle,
   Receipt,
   Wallet,
+  ShieldCheck,
 } from "lucide-react";
 import type { UserProfile } from "@shared/schema";
 const logoPath = "/logo.png";
@@ -59,7 +60,7 @@ export function AppSidebar() {
 
   const transporterMenuItems = [
     { title: "Dashboard", url: "/dashboard", icon: Home },
-    { title: "Wallet", url: "/wallet", icon: Wallet },
+    { title: "Verification", url: "/compliance", icon: ShieldCheck },
     { title: "Available Loads", url: "/marketplace", icon: List },
     { title: "My Bids", url: "/bids", icon: Gavel },
     { title: "My Jobs", url: "/jobs", icon: Briefcase },
@@ -73,6 +74,7 @@ export function AppSidebar() {
 
   const adminMenuItems = [
     { title: "Dashboard", url: "/dashboard", icon: Home },
+    { title: "Bid Management", url: "/admin/bids", icon: Gavel },
     { title: "All Loads", url: "/admin/loads", icon: Package },
     { title: "All Users", url: "/admin/users", icon: Users },
     { title: "All Jobs", url: "/jobs", icon: Briefcase },

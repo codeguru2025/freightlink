@@ -5,11 +5,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { Briefcase } from "lucide-react";
+import { Briefcase, AlertCircle, Phone, MapPin, CheckCircle2, CreditCard } from "lucide-react";
+import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import type { Job, Load, UserProfile, LoadStatus } from "@shared/schema";
 
 interface JobWithLoad extends Job {
-  load?: Load;
+  load?: (Load & { originAddress?: string; shipperContact?: { phone?: string; name?: string }; pickupDetailsReleased?: boolean });
 }
 
 export default function JobsPage() {
@@ -54,10 +56,59 @@ export default function JobsPage() {
 
   const activeJobs = jobs?.filter(j => ["accepted", "in_transit"].includes(j.status));
   const completedJobs = jobs?.filter(j => j.status === "delivered");
+  const pendingFeeJobs = isTransporter ? activeJobs?.filter(j => (j as any).feeStatus === "pending") : [];
+  const paidFeeJobs = isTransporter ? activeJobs?.filter(j => (j as any).feeStatus === "paid") : [];
 
   return (
     <DashboardLayout title="My Jobs" breadcrumbs={[{ label: "Jobs" }]}>
       <div className="space-y-6">
+        {isTransporter && pendingFeeJobs && pendingFeeJobs.length > 0 && (
+          <Card className="border-amber-300 bg-amber-50 dark:bg-amber-950">
+            <CardContent className="pt-4 pb-4">
+              <div className="flex items-start gap-3">
+                <AlertCircle className="h-5 w-5 text-amber-600 mt-0.5 flex-shrink-0" />
+                <div>
+                  <p className="font-semibold text-amber-800 dark:text-amber-300 text-sm">
+                    Payment Required — {pendingFeeJobs.length} job{pendingFeeJobs.length > 1 ? "s" : ""} awaiting 15% fee
+                  </p>
+                  <p className="text-xs text-amber-700 dark:text-amber-400 mt-1">
+                    You will receive an EcoCash payment request on your phone. Approve it to unlock full pickup details and contact info.
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {isTransporter && paidFeeJobs && paidFeeJobs.map((job) => (
+          job.load?.pickupDetailsReleased && (
+            <Card key={`contact-${job.id}`} className="border-green-300 bg-green-50 dark:bg-green-950">
+              <CardContent className="pt-4 pb-4">
+                <div className="flex items-start gap-3">
+                  <CheckCircle2 className="h-5 w-5 text-green-600 mt-0.5 flex-shrink-0" />
+                  <div className="space-y-1">
+                    <p className="font-semibold text-green-800 dark:text-green-300 text-sm">
+                      Pickup Details Unlocked — {job.load?.originCity} → {job.load?.destinationCity}
+                    </p>
+                    {job.load?.originAddress && (
+                      <div className="flex items-center gap-2 text-xs text-green-700 dark:text-green-400">
+                        <MapPin className="h-3 w-3" />
+                        <span>{job.load.originAddress}</span>
+                      </div>
+                    )}
+                    {job.load?.shipperContact?.phone && (
+                      <div className="flex items-center gap-2 text-xs text-green-700 dark:text-green-400">
+                        <Phone className="h-3 w-3" />
+                        <span>Contact: {job.load.shipperContact.name || "Shipper"} — {job.load.shipperContact.phone}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )
+        ))}
+
         <Tabs defaultValue="active" className="w-full">
           <TabsList>
             <TabsTrigger value="active" data-testid="tab-active-jobs">

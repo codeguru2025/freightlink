@@ -843,6 +843,25 @@ export class DatabaseStorage implements IStorage {
     return updated || undefined;
   }
 
+  async updateJobFeeStatus(jobId: string, feeStatus: string, feeAmount?: number, feeReference?: string): Promise<Job | undefined> {
+    const updateData: any = { feeStatus, updatedAt: new Date() };
+    if (feeAmount !== undefined) updateData.feeAmount = feeAmount.toFixed(2);
+    if (feeReference !== undefined) updateData.feeReference = feeReference;
+    if (feeStatus === 'paid') updateData.feePaidAt = new Date();
+    const [updated] = await db.update(jobs).set(updateData).where(eq(jobs.id, jobId)).returning();
+    return updated || undefined;
+  }
+
+  async getJobByFeeReference(feeReference: string): Promise<Job | undefined> {
+    const [job] = await db.select().from(jobs).where(eq(jobs.feeReference, feeReference));
+    return job || undefined;
+  }
+
+  async getJobForLoad(loadId: string, transporterId: string): Promise<Job | undefined> {
+    const [job] = await db.select().from(jobs).where(and(eq(jobs.loadId, loadId), eq(jobs.transporterId, transporterId)));
+    return job || undefined;
+  }
+
   // Wallet operations
   async getWallet(userId: string): Promise<Wallet | undefined> {
     const [wallet] = await db.select().from(wallets).where(eq(wallets.userId, userId));

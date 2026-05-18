@@ -120,6 +120,10 @@ export const jobs = pgTable("jobs", {
   paymentRequestedAt: timestamp("payment_requested_at"),
   paidAt: timestamp("paid_at"),
   podNotes: text("pod_notes"),
+  feeStatus: varchar("fee_status").default("pending"),
+  feeAmount: decimal("fee_amount", { precision: 12, scale: 2 }),
+  feeReference: varchar("fee_reference"),
+  feePaidAt: timestamp("fee_paid_at"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 }, (table) => [
@@ -403,19 +407,21 @@ export const TRANSACTION_STATUSES = ["pending", "completed", "failed", "cancelle
 export type TransactionType = typeof TRANSACTION_TYPES[number];
 export type TransactionStatus = typeof TRANSACTION_STATUSES[number];
 
-// Pricing Configuration (ride-hailing style)
+// Pricing Configuration
 // Rate per tonne-km for base price calculation: $0.50 per tonne per km
 export const BASE_RATE_PER_TONNE_KM = 0.50;
-// Commission rate per tonne-km: $0.05 per tonne per km (10% of base rate)
-export const COMMISSION_RATE_PER_TONNE_KM = 0.05;
-// Legacy percentage-based commission rate (kept for backward compatibility)
-export const COMMISSION_RATE = 0.10;
+// 15% Interest Fee (per T&Cs) applied to the agreed transport charge
+export const COMMISSION_RATE = 0.15;
+// Fee status values
+export const FEE_STATUSES = ["pending", "paid"] as const;
+export type FeeStatus = typeof FEE_STATUSES[number];
 
 // Helper functions for pricing calculations
 export function calculateBasePrice(tonnes: number, distanceKm: number): number {
   return tonnes * distanceKm * BASE_RATE_PER_TONNE_KM;
 }
 
-export function calculateCommission(tonnes: number, distanceKm: number): number {
-  return tonnes * distanceKm * COMMISSION_RATE_PER_TONNE_KM;
+// 15% Interest Fee on agreed transport charge (per T&Cs)
+export function calculateCommission(bidAmount: number): number {
+  return bidAmount * COMMISSION_RATE;
 }
