@@ -46,7 +46,7 @@ const createTruckSchema = insertTruckSchema.omit({ ownerId: true });
 // Document validation - includes all POD document types and payment proof
 // fileUrl can be a full URL or a relative path like /objects/...
 const createDocumentSchema = insertDocumentSchema.omit({ userId: true, status: true, verifiedBy: true, verifiedAt: true, rejectionReason: true }).extend({
-  documentType: z.enum(["id_document", "drivers_license", "vehicle_registration", "insurance", "proof_of_delivery", "invoice", "delivery_note", "shipment_note", "waybill", "signed_pod", "payment_proof", "other"]),
+  documentType: z.enum(["id_document", "drivers_license", "vehicle_registration", "insurance", "proof_of_delivery", "invoice", "delivery_note", "shipment_note", "waybill", "signed_pod", "payment_proof", "other", "application_form", "road_transporters_license", "cr14", "proof_of_residence", "key_personnel", "certificate_of_incorporation", "company_profile", "banking_details", "git_insurance", "vat_certificate", "tax_clearance", "vehicle_tracking"]),
   fileName: z.string().min(1, "File name is required"),
   fileUrl: z.string().min(1, "File path is required"),
 });
@@ -302,11 +302,12 @@ export async function registerRoutes(
 
       const profile = await storage.getProfile(userId);
 
-      // Unverified transporters cannot see the marketplace (per compliance rules)
       if (profile?.role === "transporter" && !profile.isVerified) {
-        return res.status(403).json({
-          message: "Your account is pending verification. Please upload your compliance documents and wait for admin approval before accessing available loads.",
-          requiresVerification: true,
+        const loads = await storage.getAvailableLoads();
+        return res.json({
+          loads,
+          isVerified: false,
+          commissionRate: 0.15,
         });
       }
 
@@ -314,6 +315,7 @@ export async function registerRoutes(
         const loads = await storage.getAvailableLoadsForTransporter(userId);
         return res.json({
           loads,
+          isVerified: true,
           commissionRate: 0.15,
           message: loads.length === 0 ? "No loads available at the moment. Check back soon." : undefined
         });
@@ -1220,6 +1222,24 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error fetching admin bids:", error);
       res.status(500).json({ message: "Failed to fetch bids" });
+    }
+  });
+
+  // Admin: get compliance status per transporter (all 15 JMZ docs per transporter)
+  app.get("/api/admin/transporter-compliance", hasAcceptedTerms, requireAdmin, async (req, res) => {
+    try {
+      const allUsers = await storage.getAllUsers();
+      const transporters = allUsers.filter((u) => u.role === "transporter");
+      const result = await Promise.all(
+        transporters.map(async (t) => {
+          const docs = await storage.getDocuments(t.userId);
+          return { ...t, documents: docs };
+        })
+      );
+      res.json(result);
+    } catch (error) {
+      console.error("Error fetching transporter compliance:", error);
+      res.status(500).json({ message: "Failed to fetch transporter compliance" });
     }
   });
 

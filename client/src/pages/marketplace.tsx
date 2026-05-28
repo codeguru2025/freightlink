@@ -6,7 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Search, Package, MapPin, Filter, Wallet, AlertCircle } from "lucide-react";
+import { Search, Package, MapPin, Filter, Wallet, AlertCircle, ShieldAlert } from "lucide-react";
 import { useState } from "react";
 import { Link, useLocation } from "wouter";
 import type { Load } from "@shared/schema";
@@ -17,6 +17,7 @@ interface MarketplaceResponse {
   currency?: string;
   commissionRate?: number;
   message?: string;
+  isVerified?: boolean;
 }
 
 const zimbabweCities = [
@@ -48,6 +49,7 @@ export default function MarketplacePage() {
   const commissionRate = marketplaceData?.commissionRate || 0.10;
   const currency = marketplaceData?.currency || "USD";
   const walletMessage = marketplaceData?.message;
+  const isVerified = marketplaceData?.isVerified !== false;
 
   const filteredLoads = loads.filter((load) => {
     const matchesSearch = !searchQuery || 
@@ -60,6 +62,9 @@ export default function MarketplacePage() {
   });
 
   const handleBid = (loadId: string) => {
+    if (!isVerified) {
+      return;
+    }
     navigate(`/loads/${loadId}/bid`);
   };
 
@@ -98,6 +103,32 @@ export default function MarketplacePage() {
                   <Button variant={walletBalance > 0 ? "outline" : "default"} data-testid="button-topup-marketplace">
                     <Wallet className="w-4 h-4 mr-2" />
                     {walletBalance > 0 ? "Manage Wallet" : "Top Up Now"}
+                  </Button>
+                </Link>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {marketplaceData && !isVerified && (
+          <Card className="border-red-500/30 bg-red-500/5">
+            <CardContent className="p-4">
+              <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-full bg-red-500/10">
+                    <ShieldAlert className="h-5 w-5 text-red-600" />
+                  </div>
+                  <div>
+                    <p className="font-semibold text-red-800 dark:text-red-300">Account Not Verified</p>
+                    <p className="text-sm text-red-700 dark:text-red-400">
+                      You can browse available loads but cannot place bids until your account is verified by an admin.
+                    </p>
+                  </div>
+                </div>
+                <Link href="/compliance">
+                  <Button variant="outline" className="border-red-500 text-red-600 hover:bg-red-50 dark:hover:bg-red-950 whitespace-nowrap">
+                    <ShieldAlert className="w-4 h-4 mr-2" />
+                    Upload Documents
                   </Button>
                 </Link>
               </div>

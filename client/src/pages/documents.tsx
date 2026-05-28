@@ -14,9 +14,9 @@ import { useState, useRef } from "react";
 import type { Document } from "@shared/schema";
 
 const documentTypeLabels: Record<string, string> = {
-  id_document: "ID Document",
-  drivers_license: "Driver's License",
-  vehicle_registration: "Vehicle Registration",
+  id_document: "Owner's Copy of ID",
+  drivers_license: "Copies of Driver's License",
+  vehicle_registration: "Vehicle Registration Books",
   insurance: "Insurance",
   proof_of_delivery: "Proof of Delivery",
   invoice: "Invoice",
@@ -25,6 +25,18 @@ const documentTypeLabels: Record<string, string> = {
   waybill: "Waybill",
   signed_pod: "Signed POD",
   other: "Other",
+  application_form: "Application Form",
+  road_transporters_license: "Road Transporter's License",
+  cr14: "CR14",
+  proof_of_residence: "Proof of Residence",
+  key_personnel: "Key Personnel Particulars",
+  certificate_of_incorporation: "Certificate of Incorporation",
+  company_profile: "Company Profile",
+  banking_details: "Banking Details",
+  git_insurance: "GIT Insurance",
+  vat_certificate: "VAT Registration Certificate",
+  tax_clearance: "Tax Clearance Certificate",
+  vehicle_tracking: "Vehicle Tracking System",
 };
 
 const statusConfig: Record<string, { label: string; variant: "default" | "secondary" | "destructive"; icon: any }> = {

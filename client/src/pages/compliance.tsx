@@ -11,10 +11,21 @@ import {
 import type { Document } from "@shared/schema";
 
 const REQUIRED_DOCS = [
-  { type: "id_document", label: "National ID / Passport", description: "Clear copy of your national ID or passport" },
-  { type: "drivers_license", label: "Driver's Licence", description: "Valid driver's licence (must cover the vehicle class)" },
-  { type: "vehicle_registration", label: "Vehicle Registration", description: "Vehicle registration book or card" },
-  { type: "insurance", label: "Insurance Certificate", description: "Current vehicle insurance certificate" },
+  { type: "application_form", label: "Application Form", description: "Completed JMZ Logistics transporter application form", required: false },
+  { type: "road_transporters_license", label: "Road Transporter's License *", description: "Valid road transporter's operating license", required: true },
+  { type: "cr14", label: "CR14", description: "CR14 company registration form", required: false },
+  { type: "id_document", label: "Owner's Copy of ID *", description: "Clear copy of the company owner's national ID or passport", required: true },
+  { type: "proof_of_residence", label: "Proof of Residence *", description: "Proof of residence of owner and/or company", required: true },
+  { type: "key_personnel", label: "Key Personnel Particulars *", description: "Details and credentials of key company personnel", required: true },
+  { type: "vehicle_registration", label: "Vehicle Registration Books *", description: "Registration books for all company vehicles", required: true },
+  { type: "drivers_license", label: "Copies of Driver's License *", description: "Valid driver's licenses for all listed drivers", required: true },
+  { type: "certificate_of_incorporation", label: "Certificate of Incorporation", description: "Company certificate of incorporation", required: false },
+  { type: "company_profile", label: "Company Profile *", description: "Comprehensive company profile document", required: true },
+  { type: "banking_details", label: "Banking Details *", description: "Banking details showing preferred bank", required: true },
+  { type: "git_insurance", label: "GIT Insurance *", description: "Goods in Transit Insurance certificate", required: true },
+  { type: "vat_certificate", label: "VAT Registration Certificate", description: "VAT registration certificate (if registered)", required: false },
+  { type: "tax_clearance", label: "Tax Clearance Certificate", description: "Valid Tax Clearance certificate (ITF 263)", required: false },
+  { type: "vehicle_tracking", label: "Vehicle Tracking System *", description: "Proof of vehicle tracking system installation", required: true },
 ] as const;
 
 function DocStatusBadge({ status }: { status: string | undefined }) {
@@ -63,9 +74,11 @@ export default function CompliancePage() {
     (data?.documents || []).map((d) => [d.documentType, d])
   );
 
-  const allVerified = REQUIRED_DOCS.every((r) => docsMap[r.type]?.status === "verified");
+  const requiredDocs = REQUIRED_DOCS.filter((r) => r.required);
+  const allRequiredVerified = requiredDocs.every((r) => docsMap[r.type]?.status === "verified");
   const anyRejected = REQUIRED_DOCS.some((r) => docsMap[r.type]?.status === "rejected");
   const pendingCount = REQUIRED_DOCS.filter((r) => docsMap[r.type]?.status === "pending").length;
+  const uploadedCount = REQUIRED_DOCS.filter((r) => docsMap[r.type]).length;
 
   return (
     <DashboardLayout title="Transporter Verification">
@@ -90,15 +103,15 @@ export default function CompliancePage() {
             <CardContent className="pt-6 flex items-start gap-3">
               <AlertTriangle className="h-5 w-5 text-amber-600 mt-0.5 flex-shrink-0" />
               <div>
-                <p className="font-semibold text-amber-800 dark:text-amber-300">Verification Pending</p>
+                <p className="font-semibold text-amber-800 dark:text-amber-300">Verification Pending — {uploadedCount}/{REQUIRED_DOCS.length} documents submitted</p>
                 <p className="text-sm text-amber-700 dark:text-amber-400">
-                  {allVerified
-                    ? "All documents verified. Admin will approve your account shortly."
+                  {allRequiredVerified
+                    ? "All required documents verified. Admin will approve your account shortly."
                     : pendingCount > 0
                     ? `${pendingCount} document(s) are under review. Admin will verify them shortly.`
                     : anyRejected
                     ? "Some documents were rejected. Please re-upload the correct documents."
-                    : "Upload all required documents below to begin the verification process."}
+                    : "Upload all required documents (marked with *) below to begin the verification process."}
                 </p>
               </div>
             </CardContent>

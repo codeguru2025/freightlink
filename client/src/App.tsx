@@ -86,14 +86,6 @@ function AuthenticatedRoutes() {
     return <RoleSelectionPage />;
   }
 
-  // Unverified transporters must complete compliance before accessing the app
-  if (profile.role === "transporter" && !profile.isVerified) {
-    const path = window.location.pathname;
-    if (path !== "/compliance") {
-      return <CompliancePage />;
-    }
-  }
-
   return (
     <Switch>
       <Route path="/" component={DashboardPage} />
